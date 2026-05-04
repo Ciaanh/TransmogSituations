@@ -1,0 +1,7 @@
+.build/
+BetterSituation/
+.vscode/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
