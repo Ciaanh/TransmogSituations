@@ -351,8 +351,10 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
             end
         end
 
-        -- Having sets but wearing none is a real state, not a failure.
-        return Unknown("no set equipped")
+        -- Having sets but wearing none is a real state, not a failure. isEquipped only goes
+        -- true when every non-ignored item of the set is worn, so a single swapped piece
+        -- lands here.
+        return Unknown(string.format("no set fully equipped (%d sets)", #setIDs))
     end
 }
 
@@ -470,7 +472,13 @@ function Triggers:AttachOption(triggerID, result)
         -- This client doesn't offer the situation we resolved to. Say so plainly rather
         -- than falling back to a neighbouring option.
         result.state = STATE_UNKNOWN
-        result.reason = "no option for situationID " .. tostring(result.situationID)
+        if result.specID then
+            result.reason = "no option with specID " .. tostring(result.specID)
+        elseif result.equipmentSetID then
+            result.reason = "no option with equipmentSetID " .. tostring(result.equipmentSetID)
+        else
+            result.reason = "no option with situationID " .. tostring(result.situationID)
+        end
         return result
     end
 

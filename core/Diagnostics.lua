@@ -21,6 +21,11 @@ function Diagnostics:FormatTriggerValue(entry)
     end
 
     if result.state == ns.Triggers.STATE_UNKNOWN then
+        -- Chat has room for the reason; the inline row on the Situations tab does not.
+        if result.reason then
+            return string.format("%s |cff808080(%s)|r", UNKNOWN_TEXT, result.reason)
+        end
+
         return UNKNOWN_TEXT
     end
 
@@ -217,6 +222,31 @@ function Diagnostics:PrintRawDump()
                 tostring(weather and weather.intensity)
             )
         )
+    end
+
+    if caps.hasEquipmentSets then
+        local _ok, setIDs = SafeCall(C_EquipmentSet.GetEquipmentSetIDs)
+        if type(setIDs) == "table" then
+            self.api:Print(string.format("|cffffd100-- equipment sets (%d) --|r", #setIDs))
+            for _, setID in ipairs(setIDs) do
+                local okInfo, name, _icon, realSetID, isEquipped, numItems, numEquipped, _numInv, numLost, numIgnored =
+                    ns.Util.SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
+                self.api:Print(
+                    string.format(
+                        "   id=%s realSetID=%s %s | isEquipped=%s items=%s/%s lost=%s ignored=%s ok=%s",
+                        tostring(setID),
+                        tostring(realSetID),
+                        tostring(name),
+                        tostring(isEquipped),
+                        tostring(numEquipped),
+                        tostring(numItems),
+                        tostring(numLost),
+                        tostring(numIgnored),
+                        tostring(okInfo)
+                    )
+                )
+            end
+        end
     end
 
     self.api:Print("|cffffd100-- categories (name | situationID spec loadout equipSet) --|r")
