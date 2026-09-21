@@ -60,6 +60,44 @@ function Diagnostics:FormatTriggerValue(entry)
     return text
 end
 
+-- outfitID is an identity, not a position: the list also carries playerFacingOutfitIndex,
+-- so the second outfit on screen can perfectly well be id 3. Always report both, plus the
+-- name, so an id can never be mistaken for a position again.
+function Diagnostics:GetOutfitsByID()
+    local byID = {}
+
+    if not ns.Capabilities.hasSituations then
+        return byID
+    end
+
+    local ok, outfits = SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
+    if ok and type(outfits) == "table" then
+        for _, info in ipairs(outfits) do
+            byID[info.outfitID] = info
+        end
+    end
+
+    return byID
+end
+
+function Diagnostics:DescribeOutfit(outfitID, outfitsByID)
+    if not outfitID or outfitID == 0 then
+        return "none"
+    end
+
+    local info = outfitsByID and outfitsByID[outfitID]
+    if not info then
+        return string.format("id %s", tostring(outfitID))
+    end
+
+    return string.format(
+        "%s (#%s, id %s)",
+        tostring(info.name),
+        tostring(info.playerFacingOutfitIndex),
+        tostring(outfitID)
+    )
+end
+
 function Diagnostics:CollectSnapshot()
     local snapshot = {
         collectedAt = date("%Y-%m-%d %H:%M:%S"),
@@ -75,6 +113,15 @@ function Diagnostics:CollectSnapshot()
         if okOutfit then
             snapshot.activeOutfitID = activeOutfitID
         end
+
+        -- The highlight in the outfit list is the *viewed* outfit, not the active one:
+        -- Blizzard does SetSelected(elementData.outfitID == GetCurrentlyViewedOutfitID()).
+        local okViewed, viewedOutfitID = SafeCall(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
+        if okViewed then
+            snapshot.viewedOutfitID = viewedOutfitID
+        end
+
+        snapshot.outfitsByID = self:GetOutfitsByID()
 
         local okEnabled, enabled = SafeCall(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
         if okEnabled then
@@ -109,9 +156,17 @@ function Diagnostics:PrintEnvironmentSnapshot()
             string.format(
                 "Situations: %s | Active outfit: %s",
                 snapshot.situationsEnabled and "enabled" or "disabled",
-                tostring(snapshot.activeOutfitID or "none")
+                self:DescribeOutfit(snapshot.activeOutfitID, snapshot.outfitsByID)
             )
         )
+
+        -- Distinct from the active outfit, and it is the one the list highlights.
+        if snapshot.viewedOutfitID ~= snapshot.activeOutfitID then
+            self.api:Print(
+                "Viewed outfit (highlighted in the list): " ..
+                    self:DescribeOutfit(snapshot.viewedOutfitID, snapshot.outfitsByID)
+            )
+        end
     end
 
     self.api:Print("|cff808080* value derived from an unverified heuristic|r")
@@ -255,6 +310,43 @@ function Diagnostics:PrintRawDump()
                     )
                 )
             end
+        end
+    end
+
+    if caps.hasSituations then
+        local _okActive, activeID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
+        local _okViewed, viewedID = SafeCall(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
+        local _okOutfits, outfits = SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
+
+        self.api:Print(
+            string.format(
+                "|cffffd100-- outfits (active id=%s, viewed id=%s) --|r",
+                tostring(activeID),
+                tostring(viewedID)
+            )
+        )
+
+        for _, info in ipairs(type(outfits) == "table" and outfits or {}) do
+            local marks = ""
+            if info.outfitID == activeID then
+                marks = marks .. " |cff00ff00[active]|r"
+            end
+            if info.outfitID == viewedID then
+                marks = marks .. " |cff00ccff[viewed]|r"
+            end
+
+            self.api:Print(
+                string.format(
+                    "   #%s id=%s %s | situations: %s | event=%s disabled=%s%s",
+                    tostring(info.playerFacingOutfitIndex),
+                    tostring(info.outfitID),
+                    tostring(info.name),
+                    table.concat(info.situationCategories or {}, " / "),
+                    tostring(info.isEventOutfit),
+                    tostring(info.isDisabled),
+                    marks
+                )
+            )
         end
     end
 
