@@ -156,3 +156,107 @@ end
 https://www.curseforge.com/wow/addons/true-form
 https://www.curseforge.com/wow/addons/true-form-dracthyr
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+Retail
+
+BetterSituation: -- capabilities --
+BetterSituation: situations=true weather=false(C_Weather=nil Enum.WeatherType=nil) equipmentSets=true delves=true loadouts=true
+BetterSituation: -- raw player state --
+BetterSituation: IsInInstance=true/neighborhood IsResting=true IsIndoors=false
+BetterSituation: IsSwimming=false IsMounted=true IsFlying=false
+BetterSituation: AlternateForm has=true in=true | GetGameTime=23:3
+BetterSituation: -- categories (name | situationID spec loadout equipSet) --
+BetterSituation: [3] Locations radio=false -> state=unknown situationID=nil specID=nil equipSetID=nil
+BetterSituation:    All Locations                | 3 0 0 0
+BetterSituation:    Rest Area                    | 4 0 0 0
+BetterSituation:    House                        | 7 0 0 0
+BetterSituation:    Character Select             | 8 0 0 0
+BetterSituation:    World                        | 5 0 0 0
+BetterSituation:    Delves                       | 6 0 0 0
+BetterSituation:    Dungeons                     | 9 0 0 0
+BetterSituation:    Raids                        | 10 0 0 0
+BetterSituation:    Arenas                       | 11 0 0 0
+BetterSituation:    Battlegrounds                | 12 0 0 0
+BetterSituation: [4] Movement radio=false -> state=ok situationID=15 specID=nil equipSetID=nil
+BetterSituation:    All Movement                 | 13 0 0 0
+BetterSituation:    Unmounted                    | 14 0 0 0
+BetterSituation:    Swimming                     | 15 0 0 0
+BetterSituation:    Ground Mount                 | 16 0 0 0
+BetterSituation:    Flying Mount                 | 17 0 0 0
+BetterSituation: [5] Specializations radio=false -> state=ok situationID=1 specID=259 equipSetID=nil
+BetterSituation:    All Specializations          | 1 0 0 0
+BetterSituation:    Assassination                | 2 259 0 0
+BetterSituation:    Outlaw                       | 2 260 0 0
+BetterSituation:    Subtlety                     | 2 261 0 0
+BetterSituation: [7] Racial Forms radio=false -> state=ok situationID=21 specID=nil equipSetID=nil
+BetterSituation:    All Racial Forms             | 20 0 0 0
+BetterSituation:    Dracthyr                     | 21 0 0 0
+BetterSituation:    Visage                       | 22 0 0 0
+BetterSituation: [11] Weather radio=false -> state=unsupported situationID=nil specID=nil equipSetID=nil
+BetterSituation:    All Weather                  | 32 0 0 0
+BetterSituation:    Clear                        | 33 0 0 0
+BetterSituation:    Rain                         | 34 0 0 0
+BetterSituation:    Snow                         | 35 0 0 0
+BetterSituation:    Sandstorm                    | 36 0 0 0
+BetterSituation: [12] Time of Day radio=false -> state=ok situationID=31 specID=nil equipSetID=nil
+BetterSituation:    All Times                    | 37 0 0 0
+BetterSituation:    Morning                      | 38 0 0 0
+BetterSituation:    Midday                       | 39 0 0 0
+BetterSituation:    Evening                      | 40 0 0 0
+BetterSituation:    Night                        | 41 0 0 0
+
+
+
+
+Forever
+
+BetterSituation: -- capabilities --
+BetterSituation: situations=true weather=true(C_Weather=table Enum.WeatherType=table) equipmentSets=true delves=true loadouts=true
+BetterSituation: -- raw player state --
+BetterSituation: IsInInstance=false/none IsResting=true IsIndoors=false
+BetterSituation: IsSwimming=false IsMounted=false IsFlying=false
+BetterSituation: AlternateForm has=false in=false | GetGameTime=14:8
+BetterSituation: Weather ok=true type=0 intensity=0
+BetterSituation: -- categories (name | situationID spec loadout equipSet) --
+BetterSituation: [3] Locations radio=false -> state=ok situationID=3 specID=nil equipSetID=nil
+BetterSituation:    All Locations                | 3 0 0 0
+BetterSituation:    Rest Area                    | 4 0 0 0
+BetterSituation:    Character Select             | 8 0 0 0
+BetterSituation:    World                        | 5 0 0 0
+BetterSituation:    Dungeons                     | 9 0 0 0
+BetterSituation:    Raids                        | 10 0 0 0
+BetterSituation:    Arenas                       | 11 0 0 0
+BetterSituation:    Battlegrounds                | 12 0 0 0
+BetterSituation: [4] Movement radio=false -> state=ok situationID=13 specID=nil equipSetID=nil
+BetterSituation:    All Movement                 | 13 0 0 0
+BetterSituation:    Unmounted                    | 14 0 0 0
+BetterSituation:    Swimming                     | 15 0 0 0
+BetterSituation:    Ground Mount                 | 16 0 0 0
+BetterSituation:    Flying Mount                 | 17 0 0 0
+BetterSituation: [5] Specializations radio=false -> state=ok situationID=1 specID=1485 equipSetID=nil
+BetterSituation:    All Specializations          | 1 0 0 0
+BetterSituation:    Hunter                       | 2 1485 0 0
+BetterSituation: [11] Weather radio=false -> state=ok situationID=23 specID=nil equipSetID=nil
+BetterSituation:    All Weather                  | 32 0 0 0
+BetterSituation:    Clear                        | 33 0 0 0
+BetterSituation:    Rain                         | 34 0 0 0
+BetterSituation:    Snow                         | 35 0 0 0
+BetterSituation:    Sand                         | 36 0 0 0
+BetterSituation: [12] Time of Day radio=false -> state=ok situationID=29 specID=nil equipSetID=nil
+BetterSituation:    All Times                    | 37 0 0 0
+BetterSituation:    Morning                      | 38 0 0 0
+BetterSituation:    Midday                       | 39 0 0 0
+BetterSituation:    Evening                      | 40 0 0 0
+BetterSituation:    Night                        | 41 0 0 0
