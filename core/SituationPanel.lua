@@ -47,87 +47,7 @@ local function AcquireValueText(situationFrame)
     value:SetWordWrap(false)
 
     situationFrame.BetterSituationValue = value
-
-    -- The row is ~170px wide, far too narrow for a reason or the multi-value list, so the
-    -- detail lives in a tooltip. Without this a "?" on the tab is undiagnosable without
-    -- dropping to chat.
-    local hover = CreateFrame("Frame", nil, situationFrame)
-    hover:SetPoint("TOPLEFT", value, "TOPLEFT", 0, 0)
-    hover:SetPoint("BOTTOMRIGHT", value, "BOTTOMRIGHT", 0, 0)
-    hover:SetHeight(14)
-    hover:EnableMouse(true)
-    hover:SetScript(
-        "OnEnter",
-        function(self)
-            local detail = situationFrame.BetterSituationDetail
-            if not detail then
-                return
-            end
-
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip_SetTitle(GameTooltip, detail.categoryName)
-
-            for _, line in ipairs(detail.lines) do
-                GameTooltip_AddNormalLine(GameTooltip, line)
-            end
-
-            GameTooltip:Show()
-        end
-    )
-    hover:SetScript("OnLeave", GameTooltip_Hide)
-
-    situationFrame.BetterSituationHover = hover
     return value
-end
-
--- Everything the narrow row cannot say.
-local function BuildTooltipLines(triggerID, result, displayName)
-    local lines = {}
-
-    if result.state == ns.Triggers.STATE_OK then
-        table.insert(lines, "Current: " .. tostring(displayName))
-
-        local also = ns.Triggers:GetAlsoNames(triggerID, result)
-        if #also > 0 then
-            table.insert(lines, "Also active: " .. table.concat(also, ", "))
-        end
-
-        if result.specAssigned then
-            table.insert(lines, "Chosen because it is assigned to your current specialization.")
-        end
-
-        if result.ambiguous then
-            table.insert(
-                lines,
-                string.format("%d sets match at once; this pick is arbitrary.", result.ambiguous)
-            )
-        end
-
-        if result.approximate then
-            table.insert(
-                lines,
-                string.format(
-                    "Last applied set; %s of %s items worn.",
-                    tostring(result.numEquipped or "?"),
-                    tostring(result.numItems or "?")
-                )
-            )
-        end
-
-        if result.unverified then
-            table.insert(lines, "Derived from an unverified heuristic.")
-        end
-    elseif result.state == ns.Triggers.STATE_UNSUPPORTED then
-        table.insert(lines, "Not available on this client.")
-    else
-        table.insert(lines, "Could not be determined.")
-    end
-
-    if result.reason then
-        table.insert(lines, "Reason: " .. result.reason)
-    end
-
-    return lines
 end
 
 function SituationPanel:RefreshRows()
@@ -147,22 +67,8 @@ function SituationPanel:RefreshRows()
                 local result = ns.Triggers:Resolve(triggerID)
                 local displayName = ns.Triggers:GetDisplayName(triggerID, result)
 
-                situationFrame.BetterSituationDetail = {
-                    categoryName = elementData.name,
-                    lines = BuildTooltipLines(triggerID, result, displayName)
-                }
-
                 if result.state == ns.Triggers.STATE_OK and displayName then
-                    -- A trailing marker keeps an inferred value from reading as an exact
-                    -- one; the tooltip explains which inference it was.
-                    local marker = ""
-                    if result.approximate or result.ambiguous then
-                        marker = " |cff808080~|r"
-                    elseif result.unverified then
-                        marker = " |cff808080*|r"
-                    end
-
-                    value:SetText(displayName .. marker)
+                    value:SetText(displayName)
                     value:SetTextColor(HIGHLIGHT_FONT_COLOR:GetRGB())
                 elseif result.state == ns.Triggers.STATE_UNSUPPORTED then
                     -- Rendering nothing here would be indistinguishable from a broken row.
