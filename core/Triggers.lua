@@ -43,8 +43,9 @@ Triggers.STATE_UNKNOWN = STATE_UNKNOWN
 -- Forever has no House (7) and no Delves (6). That rules out identifying an option by its
 -- position in the category -- position 5 is "World" on Retail but "Dungeons" on Forever.
 --
--- Ids 18/19 are presumed to be the equipment-set pair and 23-31 are unaccounted for; neither
--- is needed, because those categories are matched on equipmentSetID / specID instead.
+-- Ids 23-31 are still unaccounted for. Equipment set ids start at 0, and the "All Equipment
+-- Sets" row also carries equipmentSetID 0, so a set is identified by situationID 19 plus its
+-- equipmentSetID -- never by the field alone.
 local SITUATION = {
     AllSpecs = 1,
     Spec = 2,
@@ -63,6 +64,8 @@ local SITUATION = {
     MovementSwimming = 15,
     MovementGroundMount = 16,
     MovementFlyingMount = 17,
+    AllEquipmentSets = 18,
+    EquipmentSets = 19,
     AllRacialForms = 20,
     FormNative = 21,
     FormNonNative = 22,
@@ -84,6 +87,7 @@ Triggers.WILDCARD_SITUATIONS = {
     [SITUATION.AllSpecs] = true,
     [SITUATION.AllLocations] = true,
     [SITUATION.AllMovement] = true,
+    [SITUATION.AllEquipmentSets] = true,
     [SITUATION.AllRacialForms] = true,
     [SITUATION.AllWeather] = true,
     [SITUATION.AllTime] = true
@@ -178,16 +182,19 @@ function Triggers:FindOptionBySituation(triggerID, situationID)
     return nil
 end
 
--- Specializations and Equipment Sets have a variable number of options, all sharing one
--- situationID, so they are told apart by the id the option carries.
-function Triggers:FindOptionByField(triggerID, field, value)
-    if not value then
+-- Specializations and Equipment Sets have a variable number of options that all share one
+-- situationID, so they are told apart by the id the option carries. Both must match:
+-- equipment set ids start at 0, and "All Equipment Sets" also carries equipmentSetID 0, so
+-- the field alone is ambiguous. The situationID is what separates the All row (18) from a
+-- specific set (19), exactly as it separates All Specializations (1) from a spec (2).
+function Triggers:FindOptionBySituationAndField(triggerID, situationID, field, value)
+    if value == nil then
         return nil
     end
 
     for _, optionData in ipairs(self:GetOptions(triggerID)) do
         local option = optionData.option
-        if option and option[field] == value and value ~= 0 then
+        if option and option.situationID == situationID and option[field] == value then
             return optionData
         end
     end
@@ -392,6 +399,7 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
         local lastAppliedID = Triggers:GetLastAppliedSetID()
         local lastAppliedStillExists = false
         local lastAppliedNumItems, lastAppliedNumEquipped = nil, nil
+        local equipped = {}
 
         for _, setID in ipairs(setIDs) do
             -- GetEquipmentSetInfo returns name, icon, setID, isEquipped, numItems, numEquipped, ...
@@ -399,7 +407,7 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
                 SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
 
             if okInfo and isEquipped then
-                return Result(STATE_OK, nil, { equipmentSetID = setID })
+                table.insert(equipped, setID)
             end
 
             if setID == lastAppliedID then
@@ -409,6 +417,26 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
             end
         end
 
+        -- Several sets can report isEquipped at once, because any set whose items you happen
+        -- to be wearing counts -- sets saved from the same gear all match. Prefer the one the
+        -- player actually applied; otherwise say the pick was arbitrary rather than hide it.
+        if #equipped > 0 then
+            for _, setID in ipairs(equipped) do
+                if setID == lastAppliedID then
+                    return Result(STATE_OK, SITUATION.EquipmentSets, { equipmentSetID = setID })
+                end
+            end
+
+            return Result(
+                STATE_OK,
+                SITUATION.EquipmentSets,
+                {
+                    equipmentSetID = equipped[1],
+                    ambiguous = (#equipped > 1) and #equipped or nil
+                }
+            )
+        end
+
         -- Nothing matches exactly. isEquipped only goes true when every non-ignored slot of
         -- the set is worn, so one swapped piece drops it -- yet the player is still, in any
         -- meaningful sense, wearing the set they last applied. Fall back to that, flagged as
@@ -416,7 +444,7 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
         if lastAppliedStillExists then
             return Result(
                 STATE_OK,
-                nil,
+                SITUATION.EquipmentSets,
                 {
                     equipmentSetID = lastAppliedID,
                     approximate = true,
@@ -533,9 +561,10 @@ function Triggers:AttachOption(triggerID, result)
     local optionData = nil
 
     if result.specID then
-        optionData = self:FindOptionByField(triggerID, "specID", result.specID)
+        optionData = self:FindOptionBySituationAndField(triggerID, result.situationID, "specID", result.specID)
     elseif result.equipmentSetID then
-        optionData = self:FindOptionByField(triggerID, "equipmentSetID", result.equipmentSetID)
+        optionData =
+            self:FindOptionBySituationAndField(triggerID, result.situationID, "equipmentSetID", result.equipmentSetID)
     else
         optionData = self:FindOptionBySituation(triggerID, result.situationID)
     end
