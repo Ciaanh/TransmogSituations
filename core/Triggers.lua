@@ -29,11 +29,17 @@ Triggers.UI_TRIGGER = UI_TRIGGER
 -- Events after which the set of categories itself may differ: saving a first equipment set
 -- adds the Equipment Sets category, deleting the last removes it, and Specializations only
 -- appears from level 10. Anything caching category-derived state must react to these.
+-- The last two are about content rather than composition: each option carries a `value`
+-- flag saying whether it is assigned to the *currently viewed* outfit, and that flag is
+-- baked into the tree we cache. Blizzard refetches the whole tree on these, so we must too,
+-- or /bs list keeps reporting the previous outfit's assignments.
 Triggers.CATEGORY_EVENTS = {
     "EQUIPMENT_SETS_CHANGED",
     "PLAYER_SPECIALIZATION_CHANGED",
     "PLAYER_LEVEL_UP",
-    "PLAYER_ENTERING_WORLD"
+    "PLAYER_ENTERING_WORLD",
+    "VIEWED_TRANSMOG_OUTFIT_CHANGED",
+    "VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED"
 }
 
 local STATE_OK = "ok"
@@ -133,9 +139,17 @@ function Triggers:GetCategories()
     end
 
     local ok, categories = SafeCall(C_TransmogOutfitInfo.GetUISituationCategoriesAndOptions)
-    self.categories = (ok and type(categories) == "table") and categories or {}
 
-    return self.categories
+    -- The API is declared MayReturnNothing. Caching an empty answer would pin the addon to
+    -- "this client has no situations" until one of the CATEGORY_EVENTS happened to fire,
+    -- which can be as far off as the next loading screen. Only a non-empty answer is worth
+    -- keeping; re-asking costs one call.
+    if ok and type(categories) == "table" and #categories > 0 then
+        self.categories = categories
+        return self.categories
+    end
+
+    return {}
 end
 
 function Triggers:InvalidateCategories()
@@ -394,8 +408,12 @@ resolvers[UI_TRIGGER.Specialization] = {
         end
 
         local okInfo, specID = SafeCall(C_SpecializationInfo.GetSpecializationInfo, specIndex)
-        if not okInfo or not specID then
-            return Unknown("no spec id")
+        -- specId is documented non-nilable with Default = 0, so a character without a chosen
+        -- specialization yields 0 rather than nil -- and 0 is truthy in Lua. Left unchecked
+        -- that resolves to "ok" and then fails to match any option, reporting a misleading
+        -- "no option with specID 0" instead of simply having no specialization.
+        if not okInfo or not specID or specID == 0 then
+            return Unknown("no specialization chosen")
         end
 
         local loadoutID = nil
@@ -502,7 +520,11 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
 }
 
 resolvers[UI_TRIGGER.Forms] = {
-    events = { "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD" },
+    -- UNIT_FORM_CHANGED is the alternate-form event: TransmogCharacterMixin:OnShow registers
+    -- exactly this, guarded by GetAlternateFormInfo(). UPDATE_SHAPESHIFT_FORM is the
+    -- shapeshift-bar event and does not cover Dracthyr visage or Worgen Two Forms; it is kept
+    -- only because it costs nothing and covers form changes this resolver may later care about.
+    events = { "UNIT_FORM_CHANGED", "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD" },
     Resolve = function()
         if not ns.Capabilities.hasAlternateFormInfo then
             return Unsupported("C_PlayerInfo.GetAlternateFormInfo")
