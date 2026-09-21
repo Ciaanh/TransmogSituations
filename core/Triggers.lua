@@ -714,19 +714,41 @@ function Triggers:Init(api)
     self.api = api
     self:InvalidateCategories()
 
-    -- Must listen all the time, not just while the Situations tab is open, or we miss the
-    -- swap that tells us which set the player is wearing.
-    if ns.Capabilities.hasEquipmentSets and not self.swapWatcher then
+    -- Must listen all the time, not just while the Situations tab is open: we would miss
+    -- the swap that says which set is worn, and the category list can change composition
+    -- while the tab is shut.
+    if not self.watcher then
         local watcher = CreateFrame("Frame")
         watcher:SetScript(
             "OnEvent",
-            function(_, _event, result, setID)
-                if result and setID then
-                    self:RememberAppliedSet(setID)
+            function(_, event, ...)
+                if event == "EQUIPMENT_SWAP_FINISHED" then
+                    local result, setID = ...
+                    if result and setID then
+                        self:RememberAppliedSet(setID)
+                    end
+                    return
                 end
+
+                -- Which categories exist is not fixed for the session. Saving a first
+                -- equipment set adds the Equipment Sets category, deleting the last one
+                -- removes it, and Specializations only appears from level 10. Caching the
+                -- category list forever meant those never showed up without a /reload.
+                self:InvalidateCategories()
             end
         )
-        ns.Util.RegisterEventsSafely(watcher, { "EQUIPMENT_SWAP_FINISHED" })
-        self.swapWatcher = watcher
+
+        ns.Util.RegisterEventsSafely(
+            watcher,
+            {
+                "EQUIPMENT_SWAP_FINISHED",
+                "EQUIPMENT_SETS_CHANGED",
+                "PLAYER_SPECIALIZATION_CHANGED",
+                "PLAYER_LEVEL_UP",
+                "PLAYER_ENTERING_WORLD"
+            }
+        )
+
+        self.watcher = watcher
     end
 end
