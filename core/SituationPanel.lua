@@ -142,6 +142,13 @@ function SituationPanel:AttachToSituationsFrame()
         return
     end
 
+    -- Guard before hooking: hooksecurefunc raises on a nil method, and a client whose mixin
+    -- differs would otherwise take the addon down rather than simply going without the
+    -- inline values.
+    if type(situationsFrame.Init) ~= "function" or type(situationsFrame.Refresh) ~= "function" then
+        return
+    end
+
     self.situationsFrame = situationsFrame
 
     self.eventFrame = CreateFrame("Frame")
@@ -194,6 +201,39 @@ function SituationPanel:AttachToSituationsFrame()
     end
 end
 
+-- Keeps trying until it succeeds. Blizzard_Transmog loads on demand, and being loaded does
+-- not guarantee SituationsFrame is built yet, so a single attempt that gives up -- or one
+-- that stops listening whether or not it worked -- leaves the tab permanently bare.
+function SituationPanel:TryAttach()
+    if self.attached then
+        return
+    end
+
+    if IsBlizzardTransmogLoaded() then
+        self:AttachToSituationsFrame()
+    end
+
+    if self.attached then
+        if self.loader then
+            self.loader:UnregisterAllEvents()
+            self.loader = nil
+        end
+        return
+    end
+
+    if not self.loader then
+        local loader = CreateFrame("Frame")
+        loader:SetScript(
+            "OnEvent",
+            function()
+                self:TryAttach()
+            end
+        )
+        ns.Util.RegisterEventsSafely(loader, { "ADDON_LOADED", "PLAYER_ENTERING_WORLD" })
+        self.loader = loader
+    end
+end
+
 function SituationPanel:Init(api)
     self.api = api
 
@@ -201,20 +241,5 @@ function SituationPanel:Init(api)
         return
     end
 
-    if IsBlizzardTransmogLoaded() then
-        self:AttachToSituationsFrame()
-        return
-    end
-
-    local loader = CreateFrame("Frame")
-    loader:RegisterEvent("ADDON_LOADED")
-    loader:SetScript(
-        "OnEvent",
-        function(_, event, loadedAddon)
-            if event == "ADDON_LOADED" and loadedAddon == "Blizzard_Transmog" then
-                self:AttachToSituationsFrame()
-                loader:UnregisterEvent("ADDON_LOADED")
-            end
-        end
-    )
+    self:TryAttach()
 end
