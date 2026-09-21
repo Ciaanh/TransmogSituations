@@ -5,3 +5,5 @@ BetterSituation/
 *.tmp
 .DS_Store
 Thumbs.db
+
+_refs/

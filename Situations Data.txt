@@ -1,0 +1,158 @@
+
+Situation Data: 3 Locations
+Situation Data: 4 Movement
+Situation Data: 5 Specializations
+Situation Data: 11 Weather
+Situation Data: 12 Time of Day
+
+Situation Data: 3 Locations
+Situation Data: 4 Movement
+Situation Data: 5 Specializations
+Situation Data: 6 Equipment Sets
+Situation Data: 11 Weather
+Situation Data: 12 Time of Day
+
+Situation Data: 3 Locations
+Situation Data: 4 Movement
+Situation Data: 5 Specializations
+Situation Data: 7 Racial Forms
+Situation Data: 11 Weather
+Situation Data: 12 Time of Day
+
+
+
+Situation Data: 3 Emplacements
+Situation Data: 4 Déplacement
+Situation Data: 5 Spécialisations
+Situation Data: 6 Ensembles d’équipement
+Situation Data: 11 Météo
+Situation Data: 12 Période de la journée
+
+
+Situation Data: 3 Emplacements
+Situation Data: 4 Déplacement
+Situation Data: 5 Spécialisations
+Situation Data: 7 Formes raciales
+Situation Data: 11 Météo
+Situation Data: 12 Période de la journée
+
+
+
+C_EquipmentSet
+
+{
+	Name = "TransmogSituationTrigger",
+	Type = "Enumeration",
+	NumValues = 12,
+	MinValue = 0,
+	MaxValue = 11,
+	Fields =
+	{
+		{ Name = "None", Type = "TransmogSituationTrigger", EnumValue = 0 },
+		{ Name = "Manual", Type = "TransmogSituationTrigger", EnumValue = 1 },
+		{ Name = "TransmogUpdate", Type = "TransmogSituationTrigger", EnumValue = 2 },
+		{ Name = "Location", Type = "TransmogSituationTrigger", EnumValue = 3 },
+		{ Name = "Movement", Type = "TransmogSituationTrigger", EnumValue = 4 },
+		{ Name = "Specialization", Type = "TransmogSituationTrigger", EnumValue = 5 },
+		{ Name = "EquipmentSet", Type = "TransmogSituationTrigger", EnumValue = 6 },
+		{ Name = "Forms", Type = "TransmogSituationTrigger", EnumValue = 7 },
+		{ Name = "EventOutfit", Type = "TransmogSituationTrigger", EnumValue = 8 },
+		{ Name = "Weather", Type = "TransmogSituationTrigger", EnumValue = 9 },
+		{ Name = "TimeOfDay", Type = "TransmogSituationTrigger", EnumValue = 10 },
+		{ Name = "SettingsUpdate", Type = "TransmogSituationTrigger", EnumValue = 11 },
+	},
+},
+
+
+
+
+
+
+
+Determining the active racial form (Worgen/Human or Dracthyr Dragon/Visage) for a character in a World of Warcraft addon requires checking specific auras (buffs) or character data via the WoW API, as Blizzard does not provide a single dedicated function like GetActiveForm().
+
+Because form changes modify your character's visual model and aura states, you can track them reliably using C_UnitAuras.
+1. Checking Worgen Form (Worgen / Human)
+
+For Worgens, being in human form or worgen form is typically checked by seeing if the character currently has the "Altered Form" or related passive/buff auras, or by checking the player's race/model state. However, the most robust programmatic method in modern Lua is iterating through player auras or checking model features:
+
+    Aura Check Approach: You can scan unit auras on "player" using C_UnitAuras.GetAuraDataBySpellName("player", "Altered Form") or checking active spell effects tied to the transformation.
+
+    Alternatively, many addons inspect the player's active appearance or race flags, though checking for specific transformation buffs or tracking when the UNIT_AURA event fires for racial spells provides real-time accuracy.
+
+2. Checking Dracthyr Form (Dragon / Visage)
+
+For Dracthyr, the game handles the Visage form as an active aura effect.
+
+    The Visage Aura: When a Dracthyr is in their humanoid Visage form, they possess a specific aura (Visage). You can check for it using C_UnitAuras:
+
+Lua
+
+local function IsDracthyrInVisageForm()
+    -- Check for the Visage buff/aura by name or spell ID
+    local aura = C_UnitAuras.GetAuraDataBySpellName("player", "Visage")
+    return aura ~= nil
+end
+
+3. Recommended Event-Driven Approach
+
+Instead of polling continuously, listen to events that trigger when forms change:
+
+    Register for UNIT_AURA or look for combat log / spell cast success events matching Two Forms, Calm the Wolf, or Visage.
+
+What specific functionality are you trying to build with this check (e.g., changing action bar layouts, restricting certain addon elements, or automating macros)?
+
+To make your addon fully localized-agnostic and language-resilient, you should avoid strings entirely and instead rely on Spell IDs or C_Spell API methods that return localized-independent data.
+Solution 1: Use Spell IDs Instead of Names
+
+The underlying Spell IDs for these racial forms are universal across all language clients.
+
+    Dracthyr Visage Spell ID: 369536 (Visage)
+
+    Worgen Altered Form / Human Form Check: Worgens use hidden auras or tracker spells depending on the exact transformation state, but checking the active spell aura via ID handles localization safely.
+
+You can query auras by Spell ID using C_UnitAuras.GetAuraDataBySpellId:
+Lua
+
+local function IsDracthyrInVisageForm()
+    -- 369536 is the universal Spell ID for Visage across all localizations
+    local aura = C_UnitAuras.GetAuraDataBySpellId("player", 369536)
+    return aura ~= nil
+end
+
+Solution 2: Query Spell Info via C_Spell (If needed)
+
+If you ever need to dynamically fetch details about a spell without hardcoding text, you can pull localized or unlocalized data safely via the modern API:
+Lua
+
+local spellInfo = C_Spell.GetSpellInfo(369536)
+-- spellInfo.name will safely return the correct translation for whatever language the client is running
+
+Solution 3: Model/Race Fallback Check
+
+If an aura isn't applied consistently depending on talents (like Dracthyr's Chosen Identity shifting forms automatically), checking the player's current apparent race or sex index via unit inspection can sometimes serve as a secondary fallback, though checking aura spell IDs remains the cleanest approach for form detection.
+
+
+
+
+
+
+
+
+ C_UnitAuras.WantsAlteredForm("player") 
+
+
+
+function PlayerUtil.ShouldUseNativeFormInModelScene()
+	local _, raceFilename = UnitRace("player");
+	return (raceFilename and (raceFilename ~= "Dracthyr" and raceFilename ~= "Worgen")) or C_UnitAuras.WantsAlteredForm("player");
+end
+
+
+
+
+
+
+https://www.curseforge.com/wow/addons/true-form
+https://www.curseforge.com/wow/addons/true-form-dracthyr
+

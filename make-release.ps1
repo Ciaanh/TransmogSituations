@@ -31,7 +31,7 @@ $includes = @(
     "BetterSituation.toc",
     "LICENSE",
     "README.md",
-    "CHANGELOG.md"
+    "core"
 )
 
 # --- Clean previous artifacts -----------------------------------------------
