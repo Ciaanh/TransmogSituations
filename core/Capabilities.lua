@@ -1,0 +1,34 @@
+local _, ns = ...
+
+-- Phase 0: one place that answers "does this client have that system?".
+-- Forever exposes more than Retail (C_Weather is the notable gap), so every optional
+-- subsystem is probed once here instead of being re-tested ad hoc at each call site.
+
+local Capabilities = {}
+ns.Capabilities = Capabilities
+
+function Capabilities:Probe()
+    self.hasSituations = type(C_TransmogOutfitInfo) == "table" and
+        type(C_TransmogOutfitInfo.GetUISituationCategoriesAndOptions) == "function"
+
+    -- Retail has no C_Weather at all; indexing Enum.WeatherType there is a load-time error.
+    self.hasWeather = type(C_Weather) == "table" and type(C_Weather.GetCurrentWeather) == "function" and
+        type(Enum) == "table" and type(Enum.WeatherType) == "table"
+
+    self.hasDelves = type(C_DelvesUI) == "table" and type(C_DelvesUI.HasActiveDelve) == "function"
+
+    self.hasEquipmentSets = type(C_EquipmentSet) == "table" and
+        type(C_EquipmentSet.GetEquipmentSetIDs) == "function"
+
+    self.hasAlternateFormInfo = type(C_PlayerInfo) == "table" and
+        type(C_PlayerInfo.GetAlternateFormInfo) == "function"
+
+    self.hasTalentLoadouts = type(C_ClassTalents) == "table" and
+        type(C_ClassTalents.GetActiveConfigID) == "function"
+
+    return self
+end
+
+function Capabilities:Init()
+    self:Probe()
+end

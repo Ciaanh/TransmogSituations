@@ -5,6 +5,9 @@
 ## Version: 0.1.0
 ## SavedVariables: BetterSituationDB
 
+core\Util.lua
+core\Capabilities.lua
+core\Triggers.lua
 core\Diagnostics.lua
 core\SituationPanel.lua
 BetterSituation.lua

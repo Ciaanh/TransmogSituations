@@ -36,37 +36,11 @@ local function HandleSlashCommand(input)
         return
     end
 
-    if cmd == "situations" then
-        if C_TransmogOutfitInfo then
-            local situationsData = C_TransmogOutfitInfo.GetUISituationCategoriesAndOptions()
-            if situationsData then
-                for index, data in ipairs(situationsData) do
-                    local situationData = {
-                        triggerID = data.triggerID,
-                        name = data.name,
-                        description = data.description,
-                        isRadioButton = data.isRadioButton,
-                        groupData = data.groupData
-                    }
-
-                    print("Situation Data:", situationData.triggerID, situationData.name)
-                end
-            end
-
-            local situationsEnabled = C_TransmogOutfitInfo.GetOutfitSituationsEnabled()
-            if situationsEnabled then
-                for triggerID, enabled in pairs(situationsEnabled) do
-                    print("Situation Enabled:", triggerID, enabled)
-                end
-            end
-        end
-    end
-
     if cmd == "help" then
         Print("Commands:")
-        Print("  /bs           - Display current environment trigger values")
-        Print("  /bs list      - Display configured trigger options for viewed outfit")
-        Print("  /bs help      - Show this help message")
+        Print("  /bs        - Current value of every situation trigger")
+        Print("  /bs list   - Trigger options for the viewed outfit, with the live value marked")
+        Print("  /bs help   - This message")
         return
     end
 
@@ -88,16 +62,21 @@ frame:SetScript(
         SLASH_BETTERSITUATION2 = "/bettersituation"
         SlashCmdList.BETTERSITUATION = HandleSlashCommand
 
-        if ns.Diagnostics then
-            ns.Diagnostics:Init(BetterSituation)
-        end
-
-        if ns.SituationPanel then
-            ns.SituationPanel:Init(BetterSituation)
-        end
+        -- Capabilities first: every other module asks it what this client supports.
+        ns.Capabilities:Init()
+        ns.Triggers:Init(BetterSituation)
+        ns.Diagnostics:Init(BetterSituation)
+        ns.SituationPanel:Init(BetterSituation)
 
         if BetterSituationDB.debug then
-            Print("Loaded " .. addonName)
+            Print(
+                string.format(
+                    "Loaded %s (situations=%s, weather=%s)",
+                    addonName,
+                    tostring(ns.Capabilities.hasSituations),
+                    tostring(ns.Capabilities.hasWeather)
+                )
+            )
         end
     end
 )

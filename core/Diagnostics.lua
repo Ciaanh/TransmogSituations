@@ -1,262 +1,70 @@
 local _, ns = ...
 
+-- Chat-facing reporting. All situation values come from ns.Triggers; this module only
+-- formats them, plus the few context details (zone, clock) that are not triggers.
+
 local Diagnostics = {}
 ns.Diagnostics = Diagnostics
 
-local function SafeCall(fn, ...)
-    if type(fn) ~= "function" then
-        return false, nil
+local SafeCall = ns.Util.SafeCall
+
+local UNSUPPORTED_TEXT = "|cff808080n/a|r"
+local UNKNOWN_TEXT = "|cffffcc00?|r"
+
+-- Renders one resolved trigger. The value itself is the client's own localized option name;
+-- we only add the markers and any numeric detail the option name can't carry.
+function Diagnostics:FormatTriggerValue(entry)
+    local result = entry.result
+
+    if result.state == ns.Triggers.STATE_UNSUPPORTED then
+        return UNSUPPORTED_TEXT
     end
 
-    local ok, result = pcall(fn, ...)
-    if not ok then
-        return false, nil
+    if result.state == ns.Triggers.STATE_UNKNOWN then
+        return UNKNOWN_TEXT
     end
 
-    return true, result
-end
-
-local function InferTimeOfDay(hour)
-    if type(hour) ~= "number" then
-        return "Unknown"
+    local text = entry.displayName
+    if not text then
+        -- Resolved to a situation the client offers no option for. Show the raw ID rather
+        -- than inventing an English label.
+        text = string.format("situationID %s", tostring(result.situationID))
     end
 
-    if hour >= 6 and hour < 12 then
-        return "Morning"
+    if result.intensity and result.intensity > 0 then
+        text = string.format("%s (%d%%)", text, math.floor(result.intensity * 100 + 0.5))
     end
 
-    if hour >= 12 and hour < 17 then
-        return "Midday"
+    if result.hour then
+        text = string.format("%s (%02d:%02d)", text, result.hour, tonumber(result.minute) or 0)
     end
 
-    if hour >= 17 and hour < 21 then
-        return "Evening"
+    if result.unverified then
+        text = text .. " |cff808080*|r"
     end
 
-    return "Night"
-end
-
--- C_Weather.GetCurrentWeather() returns { type = Enum.WeatherType, intensity = 0-1 };
-local WEATHER_TYPE_NAMES = {
-    [Enum.WeatherType.Clear] = "Clear",
-    [Enum.WeatherType.Rain] = "Rain",
-    [Enum.WeatherType.Snow] = "Snow",
-    [Enum.WeatherType.Sandstorm] = "Sandstorm",
-    [Enum.WeatherType.Miscellaneous] = "Miscellaneous"
-}
-
-local function FormatWeather(weather)
-    if type(weather) ~= "table" then
-        return "Unknown"
-    end
-
-    local name = WEATHER_TYPE_NAMES[weather.type]
-    if not name then
-        return string.format("Unknown (type %s)", tostring(weather.type))
-    end
-
-    if weather.type == Enum.WeatherType.Clear then
-        return name
-    end
-
-    return string.format("%s (%d%%)", name, math.floor((tonumber(weather.intensity) or 0) * 100 + 0.5))
-end
-
-Diagnostics.FormatWeather = FormatWeather
-
-local function DetectForms()
-    local hasAlternateForm, inAlternateForm = C_PlayerInfo.GetAlternateFormInfo()
-    if not hasAlternateForm then
-        return "N/A"
-    end
-
-    return inAlternateForm and "Alternate Form" or "Native Form"
-end
-
-local function DetectMovement()
-    if IsSwimming("player") then
-        return "Swimming"
-    end
-
-    if IsMounted() then
-        if IsFlying("player") then
-            return "Flying Mount"
-        end
-        return "Ground Mount"
-    end
-
-    return "Unmounted"
-end
-
-local function DetectLocation()
-    local inInstance, instanceType = IsInInstance()
-    if inInstance then
-        if instanceType == "arena" then
-            return "Arenas"
-        end
-
-        if instanceType == "pvp" then
-            return "Battlegrounds"
-        end
-
-        if instanceType == "raid" then
-            return "Raids"
-        end
-
-        if instanceType == "party" then
-            local hasActiveDelve = false
-            if C_DelvesUI and C_DelvesUI.HasActiveDelve then
-                local okDelve, result = SafeCall(C_DelvesUI.HasActiveDelve)
-                hasActiveDelve = okDelve and result and true or false
-            end
-
-            if hasActiveDelve then
-                return "Delves"
-            end
-
-            return "Dungeons"
-        end
-    end
-
-    if IsResting() then
-        return "Rest Area"
-    end
-
-    if IsIndoors() then
-        return "House"
-    end
-
-    return "World"
-end
-
-function Diagnostics:CollectEnvironmentSnapshot()
-    local hour, minute = GetGameTime()
-    local specIndex = C_SpecializationInfo.GetSpecialization()
-    local specID, specName = nil, "Unknown"
-    if specIndex then
-        specID, specName = C_SpecializationInfo.GetSpecializationInfo(specIndex)
-    end
-
-    local weather = C_Weather.GetCurrentWeather()
-
-    local okOutfit, activeOutfitID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
-
-    return {
-        collectedAt = date("%Y-%m-%d %H:%M:%S"),
-        activeOutfitID = okOutfit and activeOutfitID or 0,
-        location = DetectLocation(),
-        movement = DetectMovement(),
-        specializationName = specName or "Unknown",
-        specializationID = specID,
-        weather = weather,
-        forms = DetectForms(),
-        serverHour = hour,
-        serverMinute = minute,
-        timeOfDay = InferTimeOfDay(hour),
-        zone = GetRealZoneText() or "Unknown",
-        subZone = GetSubZoneText() or ""
-    }
-end
-
-function Diagnostics:PrintEnvironmentSnapshot()
-    local env = self:CollectEnvironmentSnapshot()
-
-    self.api:Print("Environment " .. env.collectedAt)
-    self.api:Print("Active outfit ID: " .. tostring(env.activeOutfitID))
-    self.api:Print("Location: " .. tostring(env.location))
-    self.api:Print("Movement: " .. tostring(env.movement))
-    self.api:Print(
-        string.format(
-            "Specialization: %s (%s)",
-            tostring(env.specializationName),
-            tostring(env.specializationID or "n/a")
-        )
-    )
-    self.api:Print("Weather: " .. FormatWeather(env.weather))
-    self.api:Print("Forms: " .. tostring(env.forms))
-    self.api:Print(
-        string.format(
-            "Time of Day: %s (server %02d:%02d)",
-            tostring(env.timeOfDay),
-            tonumber(env.serverHour) or 0,
-            tonumber(env.serverMinute) or 0
-        )
-    )
-    if env.subZone and env.subZone ~= "" then
-        self.api:Print(string.format("Zone: %s - %s", tostring(env.zone), tostring(env.subZone)))
-    else
-        self.api:Print("Zone: " .. tostring(env.zone))
-    end
-end
-
-function Diagnostics:Init(api)
-    self.api = api
-
-    self.watching = false
-    self.lastSnapshot = nil
+    return text
 end
 
 function Diagnostics:CollectSnapshot()
     local snapshot = {
         collectedAt = date("%Y-%m-%d %H:%M:%S"),
-        situationsEnabled = false,
-        activeOutfitID = 0,
-        categories = {},
-        activeCriteria = {}
+        triggers = ns.Triggers:ResolveAll(),
+        zone = GetRealZoneText() or "",
+        subZone = GetSubZoneText() or "",
+        activeOutfitID = nil,
+        situationsEnabled = nil
     }
 
-    local okEnabled, situationsEnabled = SafeCall(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
-    if okEnabled then
-        snapshot.situationsEnabled = situationsEnabled and true or false
-    end
+    if ns.Capabilities.hasSituations then
+        local okOutfit, activeOutfitID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
+        if okOutfit then
+            snapshot.activeOutfitID = activeOutfitID
+        end
 
-    local okOutfit, activeOutfitID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
-    if okOutfit and type(activeOutfitID) == "number" then
-        snapshot.activeOutfitID = activeOutfitID
-    end
-
-    local okCategories, categories = SafeCall(C_TransmogOutfitInfo.GetUISituationCategoriesAndOptions)
-    if okCategories and type(categories) == "table" then
-        for _, category in ipairs(categories) do
-            local categoryEntry = {
-                triggerID = category.triggerID,
-                name = category.name,
-                isRadioButton = category.isRadioButton and true or false,
-                options = {}
-            }
-
-            for _, groupData in ipairs(category.groupData or {}) do
-                for _, optionData in ipairs(groupData.optionData or {}) do
-                    local option = optionData.option or {}
-                    local okActive, isActive = SafeCall(C_TransmogOutfitInfo.GetOutfitSituation, option)
-                    local isSelected = optionData.value and true or false
-                    local optionEntry = {
-                        name = optionData.name or "Unknown",
-                        active = isSelected,
-                        resolved = okActive and (isActive and true or false) or nil,
-                        situationID = option.situationID,
-                        specID = option.specID,
-                        loadoutID = option.loadoutID,
-                        equipmentSetID = option.equipmentSetID
-                    }
-
-                    table.insert(categoryEntry.options, optionEntry)
-
-                    if optionEntry.active then
-                        table.insert(
-                            snapshot.activeCriteria,
-                            {
-                                triggerID = categoryEntry.triggerID,
-                                triggerName = categoryEntry.name,
-                                optionName = optionEntry.name,
-                                situationID = optionEntry.situationID
-                            }
-                        )
-                    end
-                end
-            end
-
-            table.insert(snapshot.categories, categoryEntry)
+        local okEnabled, enabled = SafeCall(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
+        if okEnabled then
+            snapshot.situationsEnabled = enabled and true or false
         end
     end
 
@@ -264,22 +72,74 @@ function Diagnostics:CollectSnapshot()
     return snapshot
 end
 
-function Diagnostics:PrintCategoriesList()
+function Diagnostics:PrintEnvironmentSnapshot()
     local snapshot = self:CollectSnapshot()
 
-    self.api:Print("Trigger Categories and Options:")
-    self.api:Print("================================")
-
-    for _, category in ipairs(snapshot.categories) do
-        self.api:Print("")
-        self.api:Print(string.format("[Trigger %d] %s:", category.triggerID, category.name))
-
-        for _, option in ipairs(category.options) do
-            local marker = option.active and "|cff00ff00[SELECTED]|r" or "  "
-            self.api:Print(string.format("  %s %s", marker, option.name))
-        end
+    if #snapshot.triggers == 0 then
+        self.api:Print("No situation categories available on this client.")
+        return
     end
 
-    self.api:Print("")
-    self.api:Print("================================")
+    for _, entry in ipairs(snapshot.triggers) do
+        self.api:Print(string.format("%s: %s", entry.categoryName, self:FormatTriggerValue(entry)))
+    end
+
+    local zone = snapshot.zone
+    if snapshot.subZone ~= "" then
+        zone = string.format("%s - %s", zone, snapshot.subZone)
+    end
+    self.api:Print("Zone: " .. zone)
+
+    if snapshot.situationsEnabled ~= nil then
+        self.api:Print(
+            string.format(
+                "Situations: %s | Active outfit: %s",
+                snapshot.situationsEnabled and "enabled" or "disabled",
+                tostring(snapshot.activeOutfitID or "none")
+            )
+        )
+    end
+
+    self.api:Print("|cff808080* value derived from an unverified heuristic|r")
+end
+
+-- Full dump of the configured options for the outfit currently being viewed, with the
+-- live value marked. Useful for working out how Blizzard's own matching behaves.
+function Diagnostics:PrintCategoriesList()
+    local categories = ns.Triggers:GetCategories()
+
+    if #categories == 0 then
+        self.api:Print("No situation categories available on this client.")
+        return
+    end
+
+    for _, category in ipairs(categories) do
+        local result = ns.Triggers:Resolve(category.triggerID)
+        self.api:Print(string.format("|cffffd100[%d] %s|r", category.triggerID, category.name))
+
+        for _, groupData in ipairs(category.groupData or {}) do
+            for _, optionData in ipairs(groupData.optionData or {}) do
+                local option = optionData.option or {}
+                local isCurrent = result.state == ns.Triggers.STATE_OK and
+                    option.situationID == result.situationID and
+                    (not result.specID or option.specID == result.specID) and
+                    (not result.equipmentSetID or option.equipmentSetID == result.equipmentSetID)
+
+                local marks = ""
+                if optionData.value then
+                    marks = marks .. " |cff00ff00[assigned]|r"
+                end
+                if isCurrent then
+                    marks = marks .. " |cff00ccff[current]|r"
+                end
+
+                self.api:Print(string.format("   %s%s", optionData.name, marks))
+            end
+        end
+    end
+end
+
+function Diagnostics:Init(api)
+    self.api = api
+    self.lastSnapshot = nil
 end

@@ -1,9 +1,17 @@
 local _, ns = ...
 
+-- Phase 2: render each trigger's live value inline, directly under its label on the
+-- Situations tab, instead of as one detached block that fights the list for space.
+--
+-- Blizzard's row (TransmogSituationTemplate) is 554x50 with Title 170 wide (maxLines=2) at
+-- TOPLEFT (35,-19) and a 305-wide dropdown anchored RIGHT (-35,-2). That leaves ~9px of
+-- horizontal gap, so the value goes under the title, anchored to the title's BOTTOMLEFT so
+-- it still lands correctly when a localized title wraps to two lines.
+
 local SituationPanel = {}
 ns.SituationPanel = SituationPanel
 
-local REFRESH_INTERVAL = 2
+local POLL_INTERVAL = 1.5
 
 local function IsBlizzardTransmogLoaded()
     if C_AddOns and C_AddOns.IsAddOnLoaded then
@@ -13,152 +21,183 @@ local function IsBlizzardTransmogLoaded()
     return IsAddOnLoaded and IsAddOnLoaded("Blizzard_Transmog")
 end
 
-local function BuildLines(env)
-    local specText = string.format("%s (%s)", tostring(env.specializationName), tostring(env.specializationID or "n/a"))
-    local zoneText = (env.subZone and env.subZone ~= "") and string.format("%s - %s", tostring(env.zone), tostring(env.subZone)) or
-        tostring(env.zone)
-    local weatherText = ns.Diagnostics.FormatWeather(env.weather)
-    local timeText = string.format(
-        "%s (%02d:%02d)",
-        tostring(env.timeOfDay),
-        tonumber(env.serverHour) or 0,
-        tonumber(env.serverMinute) or 0
-    )
-
-    return {
-        "Location: " .. tostring(env.location),
-        "Movement: " .. tostring(env.movement),
-        "Spec: " .. specText,
-        "Weather: " .. weatherText,
-        "Forms: " .. tostring(env.forms),
-        "Time: " .. timeText,
-        "Zone: " .. zoneText
-    }
+local function GetSituationsFrame()
+    local wardrobeCollection = TransmogFrame and TransmogFrame.WardrobeCollection
+    local tabContent = wardrobeCollection and wardrobeCollection.TabContent
+    return tabContent and tabContent.SituationsFrame
 end
 
-function SituationPanel:Refresh()
-    if not self.body or not ns.Diagnostics then
+-- Frames come from a pool and are reused across ReleaseAll()/Acquire() cycles, so the
+-- FontString is cached on the frame itself and only ever created once.
+local function AcquireValueText(situationFrame)
+    if situationFrame.BetterSituationValue then
+        return situationFrame.BetterSituationValue
+    end
+
+    local title = situationFrame.Title
+    if not title then
+        return nil
+    end
+
+    local value = situationFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    value:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
+    value:SetWidth(title:GetWidth())
+    value:SetJustifyH("LEFT")
+    value:SetMaxLines(1)
+    value:SetWordWrap(false)
+
+    situationFrame.BetterSituationValue = value
+    return value
+end
+
+function SituationPanel:RefreshRows()
+    local situationsFrame = self.situationsFrame
+    local pool = situationsFrame and situationsFrame.SituationFramePool
+    if not pool then
         return
     end
 
-    local env = ns.Diagnostics:CollectEnvironmentSnapshot()
+    for situationFrame in pool:EnumerateActive() do
+        local elementData = situationFrame.elementData
+        local triggerID = elementData and elementData.triggerID
 
-    local lines = BuildLines(env)
-    self.body:SetText(table.concat(lines, "\n"))
+        if triggerID then
+            local value = AcquireValueText(situationFrame)
+            if value then
+                local result = ns.Triggers:Resolve(triggerID)
+                local displayName = ns.Triggers:GetDisplayName(triggerID, result)
+
+                if result.state == ns.Triggers.STATE_OK and displayName then
+                    value:SetText(displayName)
+                    value:SetTextColor(HIGHLIGHT_FONT_COLOR:GetRGB())
+                elseif result.state == ns.Triggers.STATE_UNSUPPORTED then
+                    value:SetText(nil)
+                else
+                    value:SetText("?")
+                    value:SetTextColor(GRAY_FONT_COLOR:GetRGB())
+                end
+            end
+        end
+    end
 end
 
-function SituationPanel:CreateOverlay(situationsFrame)
-    -- Anchor above the fixed Apply Changes button.
-    local anchorFrame = situationsFrame.ApplyButton or situationsFrame
-
-    local overlay = CreateFrame("Frame", nil, situationsFrame)
-    overlay:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT", 0, 12)
-    overlay:SetPoint("BOTTOMRIGHT", anchorFrame, "TOPRIGHT", 0, 12)
-    overlay:SetHeight(120)
-
-    local header = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    header:SetPoint("BOTTOMLEFT", overlay, "TOPLEFT", 0, -4)
-    header:SetText("Current Conditions")
-
-    local body = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    body:SetPoint("TOPLEFT", overlay, "TOPLEFT")
-    body:SetPoint("RIGHT", overlay, "RIGHT")
-    body:SetJustifyH("LEFT")
-    body:SetJustifyV("TOP")
-
-    self.overlay = overlay
-    self.body = body
-end
-
-function SituationPanel:StartTicking()
-    self:Refresh()
-
-    if self.ticker then
+function SituationPanel:StartTracking()
+    if self.tracking then
         return
     end
+    self.tracking = true
 
-    self.ticker = C_Timer.NewTicker(REFRESH_INTERVAL, function()
-        self:Refresh()
-    end)
+    self:RefreshRows()
+
+    ns.Util.RegisterEventsSafely(self.eventFrame, ns.Triggers:GetAllEvents())
+
+    -- Mount/swim/fly state and the clock have no usable event, so those (and only those)
+    -- need a poll, and only while the tab is actually visible.
+    if ns.Triggers:NeedsPolling() and not self.ticker then
+        self.ticker = C_Timer.NewTicker(
+            POLL_INTERVAL,
+            function()
+                self:RefreshRows()
+            end
+        )
+    end
 end
 
-function SituationPanel:StopTicking()
+function SituationPanel:StopTracking()
+    self.tracking = false
+
     if self.ticker then
         self.ticker:Cancel()
         self.ticker = nil
     end
+
+    if self.eventFrame then
+        self.eventFrame:UnregisterAllEvents()
+    end
 end
 
 function SituationPanel:AttachToSituationsFrame()
-    
     if self.attached then
         return
     end
 
-    -- WardrobeCollection/TabContent/SituationsFrame only exist once Blizzard_Transmog is loaded (retail only).
-    local wardrobeCollection = TransmogFrame and TransmogFrame.WardrobeCollection
-    local situationsFrame = wardrobeCollection and wardrobeCollection.TabContent and wardrobeCollection.TabContent.SituationsFrame
+    local situationsFrame = GetSituationsFrame()
     if not situationsFrame then
         return
     end
 
-    self:CreateOverlay(situationsFrame)
+    self.situationsFrame = situationsFrame
 
-    situationsFrame:HookScript("OnShow", function()
-        self:StartTicking()
-    end)
+    self.eventFrame = CreateFrame("Frame")
+    self.eventFrame:SetScript(
+        "OnEvent",
+        function()
+            self:RefreshRows()
+        end
+    )
 
-    situationsFrame:HookScript("OnHide", function()
-        self:StopTicking()
-    end)
+    -- The XML mixin= attribute copies the mixin's functions onto the frame at creation, so
+    -- hooking TransmogWardrobeSituationsMixin here would do nothing. Hook the instance.
+    hooksecurefunc(
+        situationsFrame,
+        "Init",
+        function()
+            self:RefreshRows()
+        end
+    )
+
+    hooksecurefunc(
+        situationsFrame,
+        "Refresh",
+        function()
+            self:RefreshRows()
+        end
+    )
+
+    situationsFrame:HookScript(
+        "OnShow",
+        function()
+            self:StartTracking()
+        end
+    )
+
+    situationsFrame:HookScript(
+        "OnHide",
+        function()
+            self:StopTracking()
+        end
+    )
 
     self.attached = true
+
+    -- Blizzard may already have built the rows before we got here.
+    self:RefreshRows()
+
+    if situationsFrame:IsVisible() then
+        self:StartTracking()
+    end
 end
 
 function SituationPanel:Init(api)
     self.api = api
 
-    if C_TransmogOutfitInfo then
-        local situationsData = C_TransmogOutfitInfo.GetUISituationCategoriesAndOptions()
-        if situationsData then
-            for index, data in ipairs(situationsData) do
-                local situationData = {
-                    triggerID = data.triggerID,
-                    name = data.name,
-                    description = data.description,
-                    isRadioButton = data.isRadioButton,
-                    groupData = data.groupData
-                };
-
-                print("Situation Data:", situationData.triggerID, situationData.name)
-            end
-        end
-        
-        local situationsEnabled = C_TransmogOutfitInfo.GetOutfitSituationsEnabled()
-        if situationsEnabled then
-            for triggerID, enabled in pairs(situationsEnabled) do
-                print("Situation Enabled:", triggerID, enabled)
-            end
-        end
+    if not ns.Capabilities.hasSituations then
+        return
     end
-
-
-    
-
-
 
     if IsBlizzardTransmogLoaded() then
         self:AttachToSituationsFrame()
         return
     end
 
-    local frame = CreateFrame("Frame")
-    frame:RegisterEvent("ADDON_LOADED")
-    frame:SetScript(
+    local loader = CreateFrame("Frame")
+    loader:RegisterEvent("ADDON_LOADED")
+    loader:SetScript(
         "OnEvent",
         function(_, event, loadedAddon)
             if event == "ADDON_LOADED" and loadedAddon == "Blizzard_Transmog" then
                 self:AttachToSituationsFrame()
+                loader:UnregisterEvent("ADDON_LOADED")
             end
         end
     )
