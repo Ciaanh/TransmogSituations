@@ -44,6 +44,15 @@ function Diagnostics:FormatTriggerValue(entry)
         text = string.format("%s (%02d:%02d)", text, result.hour, tonumber(result.minute) or 0)
     end
 
+    if result.approximate then
+        text = string.format(
+            "%s |cff808080~ (last applied, %s/%s worn)|r",
+            text,
+            tostring(result.numEquipped or "?"),
+            tostring(result.numItems or "?")
+        )
+    end
+
     if result.unverified then
         text = text .. " |cff808080*|r"
     end

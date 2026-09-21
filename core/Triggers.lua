@@ -196,6 +196,52 @@ function Triggers:FindOptionByField(triggerID, field, value)
 end
 
 --------------------------------------------------------------------------------
+-- Last applied equipment set
+--
+-- There is no "currently selected set" API. GetEquipmentSetInfo's isEquipped means "all
+-- non-ignored slots are equipped", so swapping a single ring makes the set you are plainly
+-- wearing report false. EQUIPMENT_SWAP_FINISHED does carry (result, setID), so the set the
+-- player last applied can be tracked and remembered across sessions.
+--------------------------------------------------------------------------------
+
+local function GetCharacterKey()
+    local name = UnitName and UnitName("player") or nil
+    local realm = GetRealmName and GetRealmName() or nil
+    if not name then
+        return nil
+    end
+
+    return string.format("%s-%s", name, realm or "")
+end
+
+function Triggers:RememberAppliedSet(setID)
+    self.lastAppliedSetID = setID
+
+    local db = ns.BetterSituation and ns.BetterSituation.db
+    local key = GetCharacterKey()
+    if not db or not key then
+        return
+    end
+
+    db.lastAppliedSet = db.lastAppliedSet or {}
+    db.lastAppliedSet[key] = setID
+end
+
+function Triggers:GetLastAppliedSetID()
+    if self.lastAppliedSetID then
+        return self.lastAppliedSetID
+    end
+
+    local db = ns.BetterSituation and ns.BetterSituation.db
+    local key = GetCharacterKey()
+    if db and key and db.lastAppliedSet then
+        self.lastAppliedSetID = db.lastAppliedSet[key]
+    end
+
+    return self.lastAppliedSetID
+end
+
+--------------------------------------------------------------------------------
 -- Resolvers
 --------------------------------------------------------------------------------
 
@@ -343,18 +389,44 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
             return Unknown("no equipment sets")
         end
 
+        local lastAppliedID = Triggers:GetLastAppliedSetID()
+        local lastAppliedStillExists = false
+        local lastAppliedNumItems, lastAppliedNumEquipped = nil, nil
+
         for _, setID in ipairs(setIDs) do
-            -- GetEquipmentSetInfo returns name, icon, setID, isEquipped, ...
-            local okInfo, _name, _icon, _setID, isEquipped = SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
+            -- GetEquipmentSetInfo returns name, icon, setID, isEquipped, numItems, numEquipped, ...
+            local okInfo, _name, _icon, _setID, isEquipped, numItems, numEquipped =
+                SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
+
             if okInfo and isEquipped then
                 return Result(STATE_OK, nil, { equipmentSetID = setID })
             end
+
+            if setID == lastAppliedID then
+                lastAppliedStillExists = true
+                lastAppliedNumItems = numItems
+                lastAppliedNumEquipped = numEquipped
+            end
         end
 
-        -- Having sets but wearing none is a real state, not a failure. isEquipped only goes
-        -- true when every non-ignored item of the set is worn, so a single swapped piece
-        -- lands here.
-        return Unknown(string.format("no set fully equipped (%d sets)", #setIDs))
+        -- Nothing matches exactly. isEquipped only goes true when every non-ignored slot of
+        -- the set is worn, so one swapped piece drops it -- yet the player is still, in any
+        -- meaningful sense, wearing the set they last applied. Fall back to that, flagged as
+        -- approximate so it is never mistaken for an exact match.
+        if lastAppliedStillExists then
+            return Result(
+                STATE_OK,
+                nil,
+                {
+                    equipmentSetID = lastAppliedID,
+                    approximate = true,
+                    numItems = lastAppliedNumItems,
+                    numEquipped = lastAppliedNumEquipped
+                }
+            )
+        end
+
+        return Unknown(string.format("no set equipped, none applied this session (%d sets)", #setIDs))
     end
 }
 
@@ -579,4 +651,20 @@ end
 function Triggers:Init(api)
     self.api = api
     self:InvalidateCategories()
+
+    -- Must listen all the time, not just while the Situations tab is open, or we miss the
+    -- swap that tells us which set the player is wearing.
+    if ns.Capabilities.hasEquipmentSets and not self.swapWatcher then
+        local watcher = CreateFrame("Frame")
+        watcher:SetScript(
+            "OnEvent",
+            function(_, _event, result, setID)
+                if result and setID then
+                    self:RememberAppliedSet(setID)
+                end
+            end
+        )
+        ns.Util.RegisterEventsSafely(watcher, { "EQUIPMENT_SWAP_FINISHED" })
+        self.swapWatcher = watcher
+    end
 end
