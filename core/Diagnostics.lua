@@ -24,11 +24,11 @@ function Diagnostics:FormatTriggerValue(entry)
         return UNKNOWN_TEXT
     end
 
-    local text = entry.displayName
-    if not text then
-        -- Resolved to a situation the client offers no option for. Show the raw ID rather
-        -- than inventing an English label.
-        text = string.format("situationID %s", tostring(result.situationID))
+    local text = entry.displayName or UNKNOWN_TEXT
+
+    -- Locations is multi-valued: a neighborhood is also a rest area.
+    if entry.alsoNames and #entry.alsoNames > 0 then
+        text = string.format("%s |cff808080(+ %s)|r", text, table.concat(entry.alsoNames, ", "))
     end
 
     if result.intensity and result.intensity > 0 then

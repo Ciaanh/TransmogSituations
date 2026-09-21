@@ -34,68 +34,74 @@ Triggers.STATE_OK = STATE_OK
 Triggers.STATE_UNSUPPORTED = STATE_UNSUPPORTED
 Triggers.STATE_UNKNOWN = STATE_UNKNOWN
 
--- Read an Enum.TransmogSituation member defensively, falling back to the documented numeric
--- value. The enum is identical on Forever and Retail, but a missing enum must not break load.
-local function Situation(name, fallback)
-    local enum = Enum and Enum.TransmogSituation
-    local value = enum and enum[name]
-    if type(value) == "number" then
-        return value
-    end
-
-    return fallback
-end
-
-local SITUATION = {
-    AllSpecs = Situation("AllSpecs", 0),
-    Spec = Situation("Spec", 1),
-    AllLocations = Situation("AllLocations", 2),
-    LocationRested = Situation("LocationRested", 3),
-    LocationHouse = Situation("LocationHouse", 4),
-    LocationWorld = Situation("LocationWorld", 6),
-    LocationDelves = Situation("LocationDelves", 7),
-    LocationDungeons = Situation("LocationDungeons", 8),
-    LocationRaids = Situation("LocationRaids", 9),
-    LocationArenas = Situation("LocationArenas", 10),
-    LocationBattlegrounds = Situation("LocationBattlegrounds", 11),
-    AllMovement = Situation("AllMovement", 12),
-    MovementUnmounted = Situation("MovementUnmounted", 13),
-    MovementSwimming = Situation("MovementSwimming", 14),
-    MovementGroundMount = Situation("MovementGroundMount", 15),
-    MovementFlyingMount = Situation("MovementFlyingMount", 16),
-    AllEquipmentSets = Situation("AllEquipmentSets", 17),
-    EquipmentSets = Situation("EquipmentSets", 18),
-    AllRacialForms = Situation("AllRacialForms", 19),
-    FormNative = Situation("FormNative", 20),
-    FormNonNative = Situation("FormNonNative", 21),
-    AllWeather = Situation("AllWeather", 22),
-    WeatherClear = Situation("WeatherClear", 23),
-    WeatherRain = Situation("WeatherRain", 24),
-    WeatherSnow = Situation("WeatherSnow", 25),
-    WeatherSand = Situation("WeatherSand", 26),
-    AllTime = Situation("AllTime", 27),
-    TimeMorning = Situation("TimeMorning", 28),
-    TimeDay = Situation("TimeDay", 29),
-    TimeEvening = Situation("TimeEvening", 30),
-    TimeNight = Situation("TimeNight", 31)
+-- The live client's situationID values are NOT the documented Enum.TransmogSituation
+-- values: they are a permutation with a different base (in game, House=7 and World=5, and
+-- Time of Day sits at 37-41 rather than 27-31). Blizzard's own UI never reads situationID
+-- either -- it passes the whole option table around as an opaque token -- so there is
+-- nothing to anchor a fixed table to.
+--
+-- What IS stable is the order of the options inside each category, which matches the
+-- documented enum order exactly. So we identify a value by its ordinal slot in the
+-- category and read the real situationID back out of the client's own data.
+local SLOT = {
+    All = "All",
+    -- Location
+    Rested = "Rested",
+    House = "House",
+    CharacterSelect = "CharacterSelect",
+    World = "World",
+    Delves = "Delves",
+    Dungeons = "Dungeons",
+    Raids = "Raids",
+    Arenas = "Arenas",
+    Battlegrounds = "Battlegrounds",
+    -- Movement
+    Unmounted = "Unmounted",
+    Swimming = "Swimming",
+    GroundMount = "GroundMount",
+    FlyingMount = "FlyingMount",
+    -- Forms
+    Native = "Native",
+    NonNative = "NonNative",
+    -- Weather
+    Clear = "Clear",
+    Rain = "Rain",
+    Snow = "Snow",
+    Sand = "Sand",
+    -- Time of day
+    Morning = "Morning",
+    Day = "Day",
+    Evening = "Evening",
+    Night = "Night"
 }
-Triggers.SITUATION = SITUATION
+Triggers.SLOT = SLOT
 
--- The per-category "any value" options. Used by the Phase 4 matcher as wildcards.
-Triggers.WILDCARD_SITUATIONS = {
-    [SITUATION.AllSpecs] = true,
-    [SITUATION.AllLocations] = true,
-    [SITUATION.AllMovement] = true,
-    [SITUATION.AllEquipmentSets] = true,
-    [SITUATION.AllRacialForms] = true,
-    [SITUATION.AllWeather] = true,
-    [SITUATION.AllTime] = true
+-- Ordinal layout of each category, in the order the client lists its options.
+-- Specializations and Equipment Sets are variable length past the leading "All", so their
+-- entries are matched on specID / equipmentSetID instead of by position.
+local CATEGORY_SLOTS = {
+    [UI_TRIGGER.Location] = {
+        SLOT.All, SLOT.Rested, SLOT.House, SLOT.CharacterSelect, SLOT.World,
+        SLOT.Delves, SLOT.Dungeons, SLOT.Raids, SLOT.Arenas, SLOT.Battlegrounds
+    },
+    [UI_TRIGGER.Movement] = {
+        SLOT.All, SLOT.Unmounted, SLOT.Swimming, SLOT.GroundMount, SLOT.FlyingMount
+    },
+    [UI_TRIGGER.Specialization] = { SLOT.All },
+    [UI_TRIGGER.EquipmentSet] = { SLOT.All },
+    [UI_TRIGGER.Forms] = { SLOT.All, SLOT.Native, SLOT.NonNative },
+    [UI_TRIGGER.Weather] = { SLOT.All, SLOT.Clear, SLOT.Rain, SLOT.Snow, SLOT.Sand },
+    [UI_TRIGGER.TimeOfDay] = {
+        SLOT.All, SLOT.Morning, SLOT.Day, SLOT.Evening, SLOT.Night
+    }
 }
+Triggers.CATEGORY_SLOTS = CATEGORY_SLOTS
 
-local function Result(state, situationID, extra)
+
+local function Result(state, slot, extra)
     local result = extra or {}
     result.state = state
-    result.situationID = situationID
+    result.slot = slot
     return result
 end
 
@@ -108,7 +114,7 @@ local function Unknown(reason)
 end
 
 --------------------------------------------------------------------------------
--- Category data (localized names come from here, never from hardcoded strings)
+-- Category data. Localized names and the real situationIDs both come from here.
 --------------------------------------------------------------------------------
 
 function Triggers:GetCategories()
@@ -129,6 +135,7 @@ end
 
 function Triggers:InvalidateCategories()
     self.categories = nil
+    self.orderedOptions = nil
 end
 
 function Triggers:GetCategory(triggerID)
@@ -141,54 +148,55 @@ function Triggers:GetCategory(triggerID)
     return nil
 end
 
-local function OptionMatches(option, result, matchSecondary)
-    if option.situationID ~= result.situationID then
-        return false
+-- Options flattened across groups, in the order the client lists them. That order is the
+-- thing we rely on, so it is never sorted or reshuffled.
+function Triggers:GetOrderedOptions(triggerID)
+    self.orderedOptions = self.orderedOptions or {}
+    if self.orderedOptions[triggerID] then
+        return self.orderedOptions[triggerID]
     end
 
-    if not matchSecondary then
-        return true
+    local ordered = {}
+    local category = self:GetCategory(triggerID)
+
+    for _, groupData in ipairs(category and category.groupData or {}) do
+        for _, optionData in ipairs(groupData.optionData or {}) do
+            table.insert(ordered, optionData)
+        end
     end
 
-    if result.specID and option.specID ~= result.specID then
-        return false
-    end
-
-    if result.equipmentSetID and option.equipmentSetID ~= result.equipmentSetID then
-        return false
-    end
-
-    if result.loadoutID and option.loadoutID ~= result.loadoutID then
-        return false
-    end
-
-    return true
+    self.orderedOptions[triggerID] = ordered
+    return ordered
 end
 
--- Localized display name for a resolved value, taken from the client's own option list.
--- Returns nil when nothing matches, so callers can render a neutral placeholder rather
--- than inventing English text.
-function Triggers:GetDisplayName(triggerID, result)
-    if not result or result.state ~= STATE_OK or not result.situationID then
+-- The option occupying a named ordinal slot of a category.
+function Triggers:GetSlotOption(triggerID, slot)
+    local slots = CATEGORY_SLOTS[triggerID]
+    if not slots or not slot then
         return nil
     end
 
-    local category = self:GetCategory(triggerID)
-    if not category then
+    for index, slotName in ipairs(slots) do
+        if slotName == slot then
+            return self:GetOrderedOptions(triggerID)[index]
+        end
+    end
+
+    return nil
+end
+
+-- Specializations and Equipment Sets have a variable number of options past the leading
+-- "All", so they are matched on the ID the option carries rather than by position.
+function Triggers:FindOptionByField(triggerID, field, value)
+    if not value then
         return nil
     end
 
-    -- Two passes: an exact match on the secondary IDs (spec/equipment set/loadout) first,
-    -- then situationID alone. Spec options share one situationID and differ only by specID,
-    -- and a talent loadout may narrow it further than we can resolve.
-    for _, matchSecondary in ipairs({ true, false }) do
-        for _, groupData in ipairs(category.groupData or {}) do
-            for _, optionData in ipairs(groupData.optionData or {}) do
-                local option = optionData.option
-                if option and OptionMatches(option, result, matchSecondary) then
-                    return optionData.name
-                end
-            end
+    for index, optionData in ipairs(self:GetOrderedOptions(triggerID)) do
+        local option = optionData.option
+        -- index 1 is the "All ..." entry, whose IDs are all zero.
+        if index > 1 and option and option[field] == value then
+            return optionData
         end
     end
 
@@ -196,7 +204,8 @@ function Triggers:GetDisplayName(triggerID, result)
 end
 
 --------------------------------------------------------------------------------
--- Resolvers
+-- Resolvers. Each answers with an ordinal slot (or an ID to match on), never with a
+-- raw situationID, because the client owns that number.
 --------------------------------------------------------------------------------
 
 local resolvers = {}
@@ -211,67 +220,85 @@ resolvers[UI_TRIGGER.Location] = {
     },
     Resolve = function()
         local inInstance, instanceType = IsInInstance()
+
+        -- Locations is a checkbox category and genuinely multi-valued: standing in a
+        -- neighborhood also counts as resting. Report the most specific as the value and
+        -- keep the rest in `also` so the Phase 4 matcher can use them.
+        local also = {}
+        if IsResting() then
+            table.insert(also, SLOT.Rested)
+        end
+
+        local function Primary(slot)
+            local filtered = {}
+            for _, other in ipairs(also) do
+                if other ~= slot then
+                    table.insert(filtered, other)
+                end
+            end
+
+            return Result(STATE_OK, slot, { also = filtered })
+        end
+
         if inInstance then
             if instanceType == "arena" then
-                return Result(STATE_OK, SITUATION.LocationArenas)
+                return Primary(SLOT.Arenas)
             end
 
             if instanceType == "pvp" then
-                return Result(STATE_OK, SITUATION.LocationBattlegrounds)
+                return Primary(SLOT.Battlegrounds)
             end
 
             if instanceType == "raid" then
-                return Result(STATE_OK, SITUATION.LocationRaids)
+                return Primary(SLOT.Raids)
+            end
+
+            -- Confirmed in game: player housing reports as the "neighborhood" instance type.
+            if instanceType == "neighborhood" then
+                return Primary(SLOT.House)
             end
 
             if instanceType == "party" then
                 if ns.Capabilities.hasDelves then
                     local ok, hasActiveDelve = SafeCall(C_DelvesUI.HasActiveDelve)
                     if ok and hasActiveDelve then
-                        return Result(STATE_OK, SITUATION.LocationDelves)
+                        return Primary(SLOT.Delves)
                     end
                 end
 
-                return Result(STATE_OK, SITUATION.LocationDungeons)
+                return Primary(SLOT.Dungeons)
             end
 
-            -- "scenario" and friends have no TransmogSituation counterpart.
             return Unknown("instanceType=" .. tostring(instanceType))
         end
 
         if IsResting() then
-            return Result(STATE_OK, SITUATION.LocationRested)
+            return Primary(SLOT.Rested)
         end
 
-        -- UNVERIFIED: LocationHouse is assumed to mean player housing, but IsIndoors() is
-        -- the only signal available. See docs/ROADMAP.md, open question 1.
-        if IsIndoors() then
-            return Result(STATE_OK, SITUATION.LocationHouse, { unverified = true })
-        end
-
-        return Result(STATE_OK, SITUATION.LocationWorld)
+        return Primary(SLOT.World)
     end
 }
 
 resolvers[UI_TRIGGER.Movement] = {
-    -- Mount state has PLAYER_MOUNT_DISPLAY_CHANGED, but swimming and flying have no event,
-    -- so this is the one resolver that genuinely needs polling.
+    -- Mount state has an event, but swimming and flying do not, so this is the one
+    -- resolver that genuinely needs polling.
     events = { "PLAYER_MOUNT_DISPLAY_CHANGED" },
     poll = true,
     Resolve = function()
         if IsSwimming("player") then
-            return Result(STATE_OK, SITUATION.MovementSwimming)
+            return Result(STATE_OK, SLOT.Swimming)
         end
 
         if IsMounted() then
             if IsFlying("player") then
-                return Result(STATE_OK, SITUATION.MovementFlyingMount)
+                return Result(STATE_OK, SLOT.FlyingMount)
             end
 
-            return Result(STATE_OK, SITUATION.MovementGroundMount)
+            return Result(STATE_OK, SLOT.GroundMount)
         end
 
-        return Result(STATE_OK, SITUATION.MovementUnmounted)
+        return Result(STATE_OK, SLOT.Unmounted)
     end
 }
 
@@ -301,7 +328,7 @@ resolvers[UI_TRIGGER.Specialization] = {
             end
         end
 
-        return Result(STATE_OK, SITUATION.Spec, { specID = specID, loadoutID = loadoutID })
+        return Result(STATE_OK, nil, { specID = specID, loadoutID = loadoutID })
     end
 }
 
@@ -321,7 +348,7 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
             -- GetEquipmentSetInfo returns name, icon, setID, isEquipped, ...
             local okInfo, _name, _icon, _setID, isEquipped = SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
             if okInfo and isEquipped then
-                return Result(STATE_OK, SITUATION.EquipmentSets, { equipmentSetID = setID })
+                return Result(STATE_OK, nil, { equipmentSetID = setID })
             end
         end
 
@@ -343,7 +370,9 @@ resolvers[UI_TRIGGER.Forms] = {
             return Unsupported("race has no alternate form")
         end
 
-        return Result(STATE_OK, inAlternateForm and SITUATION.FormNonNative or SITUATION.FormNative)
+        -- Confirmed in game on a Dracthyr: visage reports inAlternateForm = true, and the
+        -- category lists the racial form first ("Dracthyr") and visage second.
+        return Result(STATE_OK, inAlternateForm and SLOT.NonNative or SLOT.Native)
     end
 }
 
@@ -360,37 +389,37 @@ resolvers[UI_TRIGGER.Weather] = {
             return Unknown("no weather info")
         end
 
-        local intensity = tonumber(weather.intensity) or 0
-        local extra = { intensity = intensity }
+        local extra = { intensity = tonumber(weather.intensity) or 0 }
 
         if weather.type == Enum.WeatherType.Clear then
-            return Result(STATE_OK, SITUATION.WeatherClear, extra)
+            return Result(STATE_OK, SLOT.Clear, extra)
         end
 
         if weather.type == Enum.WeatherType.Rain then
-            return Result(STATE_OK, SITUATION.WeatherRain, extra)
+            return Result(STATE_OK, SLOT.Rain, extra)
         end
 
         if weather.type == Enum.WeatherType.Snow then
-            return Result(STATE_OK, SITUATION.WeatherSnow, extra)
+            return Result(STATE_OK, SLOT.Snow, extra)
         end
 
         if weather.type == Enum.WeatherType.Sandstorm then
-            return Result(STATE_OK, SITUATION.WeatherSand, extra)
+            return Result(STATE_OK, SLOT.Sand, extra)
         end
 
-        -- Enum.WeatherType.Miscellaneous has no TransmogSituation counterpart.
-        -- See docs/ROADMAP.md, open question 5.
+        -- Enum.WeatherType.Miscellaneous has no counterpart in the category.
         return Unknown("weather type " .. tostring(weather.type))
     end
 }
 
--- UNVERIFIED: these boundaries are guesses carried over from the first implementation.
--- They must be replaced with values sampled in game. See docs/ROADMAP.md, open question 2.
+-- UNVERIFIED: the client's own labels are All Times / Morning / Midday / Evening / Night,
+-- but the hour each band starts at is still a guess. 23:03 reading as Night is consistent
+-- with this, which is the only point confirmed so far.
+-- See docs/ROADMAP.md, open question 2.
 local TIME_BOUNDARIES = {
-    { from = 6, to = 12, situation = SITUATION.TimeMorning },
-    { from = 12, to = 17, situation = SITUATION.TimeDay },
-    { from = 17, to = 21, situation = SITUATION.TimeEvening }
+    { from = 6, to = 12, slot = SLOT.Morning },
+    { from = 12, to = 17, slot = SLOT.Day },
+    { from = 17, to = 21, slot = SLOT.Evening }
 }
 
 resolvers[UI_TRIGGER.TimeOfDay] = {
@@ -405,11 +434,11 @@ resolvers[UI_TRIGGER.TimeOfDay] = {
 
         for _, boundary in ipairs(TIME_BOUNDARIES) do
             if hour >= boundary.from and hour < boundary.to then
-                return Result(STATE_OK, boundary.situation, extra)
+                return Result(STATE_OK, boundary.slot, extra)
             end
         end
 
-        return Result(STATE_OK, SITUATION.TimeNight, extra)
+        return Result(STATE_OK, SLOT.Night, extra)
     end
 }
 
@@ -418,6 +447,37 @@ Triggers.resolvers = resolvers
 --------------------------------------------------------------------------------
 -- Public API
 --------------------------------------------------------------------------------
+
+-- Turn a resolver's answer into the client's own option: its localized name and the real
+-- situationID, both read back from the category data rather than assumed.
+function Triggers:AttachOption(triggerID, result)
+    if result.state ~= STATE_OK then
+        return result
+    end
+
+    local optionData = nil
+
+    if result.specID then
+        optionData = self:FindOptionByField(triggerID, "specID", result.specID)
+    elseif result.equipmentSetID then
+        optionData = self:FindOptionByField(triggerID, "equipmentSetID", result.equipmentSetID)
+    else
+        optionData = self:GetSlotOption(triggerID, result.slot)
+    end
+
+    if not optionData then
+        result.state = STATE_UNKNOWN
+        result.reason = "no option for slot " .. tostring(result.slot or result.specID or result.equipmentSetID)
+        return result
+    end
+
+    result.optionName = optionData.name
+    result.option = optionData.option
+    result.situationID = optionData.option and optionData.option.situationID
+    result.isAssigned = optionData.value and true or false
+
+    return result
+end
 
 function Triggers:Resolve(triggerID)
     local resolver = resolvers[triggerID]
@@ -430,7 +490,26 @@ function Triggers:Resolve(triggerID)
         return Unknown("resolver error")
     end
 
-    return result
+    return self:AttachOption(triggerID, result)
+end
+
+-- Localized display name for a resolved value, straight from the client's option list.
+function Triggers:GetDisplayName(triggerID, result)
+    return result and result.optionName or nil
+end
+
+-- The extra slots that are also true right now (Locations is multi-valued), as display names.
+function Triggers:GetAlsoNames(triggerID, result)
+    local names = {}
+
+    for _, slot in ipairs(result and result.also or {}) do
+        local optionData = self:GetSlotOption(triggerID, slot)
+        if optionData then
+            table.insert(names, optionData.name)
+        end
+    end
+
+    return names
 end
 
 -- Resolve every category this client actually offers, in the client's own order.
@@ -445,7 +524,8 @@ function Triggers:ResolveAll()
                 triggerID = category.triggerID,
                 categoryName = category.name,
                 result = result,
-                displayName = self:GetDisplayName(category.triggerID, result)
+                displayName = self:GetDisplayName(category.triggerID, result),
+                alsoNames = self:GetAlsoNames(category.triggerID, result)
             }
         )
     end
@@ -455,8 +535,8 @@ end
 
 -- The union of the events the *active* categories care about. Restricted to categories the
 -- client actually offers, so we never try to register an event this client doesn't know --
--- RegisterEvent throws on an unknown event name, and WEATHER_CHANGED is exactly that on Retail.
--- Callers should still register defensively; see ns.Util.RegisterEventsSafely.
+-- RegisterEvent throws on an unknown event name, and WEATHER_CHANGED is exactly that on
+-- Retail. Callers should still register defensively; see ns.Util.RegisterEventsSafely.
 function Triggers:GetAllEvents()
     local seen, events = {}, {}
 

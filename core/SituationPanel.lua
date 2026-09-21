@@ -74,11 +74,6 @@ function SituationPanel:RefreshRows()
                     -- Rendering nothing here would be indistinguishable from a broken row.
                     value:SetText("n/a")
                     value:SetTextColor(GRAY_FONT_COLOR:GetRGB())
-                elseif result.state == ns.Triggers.STATE_OK then
-                    -- Resolved, but no option carries that situationID: the mapping is wrong,
-                    -- not the player state. Show the ID so /bs dump has something to chase.
-                    value:SetText(string.format("? (%s)", tostring(result.situationID)))
-                    value:SetTextColor(GRAY_FONT_COLOR:GetRGB())
                 else
                     value:SetText("?")
                     value:SetTextColor(GRAY_FONT_COLOR:GetRGB())
