@@ -8,6 +8,9 @@
 core\Util.lua
 core\Capabilities.lua
 core\Triggers.lua
+core\OutfitCache.lua
+core\Eligibility.lua
 core\Diagnostics.lua
+core\StatusPanel.lua
 core\SituationPanel.lua
 BetterSituation.lua

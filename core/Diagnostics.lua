@@ -404,6 +404,98 @@ function Diagnostics:PrintRawDump()
     end
 end
 
+-- Phase 4 reporting. Eligibility is a prediction reconstructed from a cache the player
+-- fills by browsing outfits, so the output always says how complete that cache is.
+function Diagnostics:PrintEligible()
+    if not ns.Capabilities.hasSituations then
+        self.api:Print("Situations are not available on this client.")
+        return
+    end
+
+    local eligible, rejected = ns.Eligibility:GetEligible()
+    local unrecorded = ns.OutfitCache:GetUnrecordedOutfits()
+
+    if #eligible == 0 then
+        self.api:Print("No outfit matches the current situation.")
+    else
+        self.api:Print("Eligible outfits, most specific first:")
+        for index, entry in ipairs(eligible) do
+            local marker = (index == 1) and "|cff00ff00>|r" or " "
+            self.api:Print(
+                string.format(
+                    "  %s %s (#%s) |cff808080- %d matched: %s|r",
+                    marker,
+                    entry.name,
+                    tostring(entry.index),
+                    entry.specificity,
+                    #entry.matched > 0 and table.concat(entry.matched, ", ") or "nothing constrained"
+                )
+            )
+        end
+    end
+
+    local notRecorded = 0
+    for _, entry in ipairs(rejected) do
+        if entry.reason == "not recorded" then
+            notRecorded = notRecorded + 1
+        end
+    end
+
+    if notRecorded > 0 then
+        self.api:Print(
+            string.format(
+                "|cffffcc00%d of %d outfits have never been viewed, so they cannot be matched yet.|r",
+                notRecorded,
+                #eligible + #rejected
+            )
+        )
+        self.api:Print("Open the transmog Situations tab and click through them, or use /bs scan.")
+    end
+
+    if ns.BetterSituation.db.debug and #rejected > 0 then
+        self.api:Print("Rejected:")
+        for _, entry in ipairs(rejected) do
+            self.api:Print(string.format("  |cff808080%s - %s|r", entry.name, tostring(entry.reason)))
+        end
+    end
+
+    if #unrecorded == 0 and notRecorded == 0 then
+        self.api:Print(string.format("|cff808080All %d outfits recorded.|r", ns.OutfitCache:Count()))
+    end
+end
+
+function Diagnostics:PrintVerify()
+    if not ns.Capabilities.hasSituations then
+        self.api:Print("Situations are not available on this client.")
+        return
+    end
+
+    local report = ns.Eligibility:Verify()
+    if not report then
+        self.api:Print("Could not read the active outfit.")
+        return
+    end
+
+    local outfitsByID = self:GetOutfitsByID()
+
+    self.api:Print("Blizzard applied: " .. self:DescribeOutfit(report.activeOutfitID, outfitsByID))
+    self.api:Print("We would predict: " .. self:DescribeOutfit(report.predictedOutfitID, outfitsByID))
+
+    if report.agrees then
+        self.api:Print("|cff00ff00Prediction agrees.|r")
+    else
+        self.api:Print("|cffff5555Prediction disagrees - the matching rules are incomplete.|r")
+    end
+
+    self.api:Print(
+        string.format(
+            "|cff808080%d outfits recorded, %d never viewed.|r",
+            report.recorded,
+            report.unrecorded
+        )
+    )
+end
+
 function Diagnostics:Init(api)
     self.api = api
     self.lastSnapshot = nil

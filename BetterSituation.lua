@@ -41,12 +41,43 @@ local function HandleSlashCommand(input)
         return
     end
 
+    if cmd == "panel" then
+        ns.StatusPanel:Toggle()
+        return
+    end
+
+    if cmd == "eligible" then
+        ns.Diagnostics:PrintEligible()
+        return
+    end
+
+    if cmd == "verify" then
+        ns.Diagnostics:PrintVerify()
+        return
+    end
+
+    if cmd == "scan" then
+        ns.OutfitCache:Scan()
+        return
+    end
+
+    if cmd == "debug" then
+        BetterSituationDB.debug = not BetterSituationDB.debug
+        Print("Debug output " .. (BetterSituationDB.debug and "enabled" or "disabled"))
+        return
+    end
+
     if cmd == "help" then
         Print("Commands:")
-        Print("  /bs        - Current value of every situation trigger")
-        Print("  /bs list   - Trigger options for the viewed outfit, with the live value marked")
-        Print("  /bs dump   - Raw option IDs and player state, for diagnosing mismatches")
-        Print("  /bs help   - This message")
+        Print("  /bs          - Current value of every situation trigger")
+        Print("  /bs panel    - Toggle the standalone panel")
+        Print("  /bs eligible - Outfits matching the current situation")
+        Print("  /bs verify   - Compare our prediction against the outfit Blizzard applied")
+        Print("  /bs scan     - Record every outfit's situations (transmog window must be open)")
+        Print("  /bs list     - Trigger options for the viewed outfit, with the live value marked")
+        Print("  /bs dump     - Raw option IDs and player state, for diagnosing mismatches")
+        Print("  /bs debug    - Toggle extra output")
+        Print("  /bs help     - This message")
         return
     end
 
@@ -71,7 +102,10 @@ frame:SetScript(
         -- Capabilities first: every other module asks it what this client supports.
         ns.Capabilities:Init()
         ns.Triggers:Init(BetterSituation)
+        ns.OutfitCache:Init(BetterSituation)
+        ns.Eligibility:Init(BetterSituation)
         ns.Diagnostics:Init(BetterSituation)
+        ns.StatusPanel:Init(BetterSituation)
         ns.SituationPanel:Init(BetterSituation)
 
         if BetterSituationDB.debug then
