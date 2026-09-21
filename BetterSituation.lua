@@ -36,10 +36,16 @@ local function HandleSlashCommand(input)
         return
     end
 
+    if cmd == "dump" then
+        ns.Diagnostics:PrintRawDump()
+        return
+    end
+
     if cmd == "help" then
         Print("Commands:")
         Print("  /bs        - Current value of every situation trigger")
         Print("  /bs list   - Trigger options for the viewed outfit, with the live value marked")
+        Print("  /bs dump   - Raw option IDs and player state, for diagnosing mismatches")
         Print("  /bs help   - This message")
         return
     end

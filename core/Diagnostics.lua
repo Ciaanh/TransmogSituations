@@ -139,6 +139,107 @@ function Diagnostics:PrintCategoriesList()
     end
 end
 
+-- Raw ground truth, for working out what the client actually reports rather than what the
+-- generated API docs imply. Prints every option's real IDs next to the resolver's answer,
+-- plus the raw player-state calls the resolvers are built on.
+function Diagnostics:PrintRawDump()
+    local caps = ns.Capabilities
+    self.api:Print("|cffffd100-- capabilities --|r")
+    self.api:Print(
+        string.format(
+            "situations=%s weather=%s(C_Weather=%s Enum.WeatherType=%s) equipmentSets=%s delves=%s loadouts=%s",
+            tostring(caps.hasSituations),
+            tostring(caps.hasWeather),
+            type(C_Weather),
+            type(Enum and Enum.WeatherType),
+            tostring(caps.hasEquipmentSets),
+            tostring(caps.hasDelves),
+            tostring(caps.hasTalentLoadouts)
+        )
+    )
+
+    self.api:Print("|cffffd100-- raw player state --|r")
+    local inInstance, instanceType = IsInInstance()
+    self.api:Print(
+        string.format(
+            "IsInInstance=%s/%s IsResting=%s IsIndoors=%s",
+            tostring(inInstance),
+            tostring(instanceType),
+            tostring(IsResting()),
+            tostring(IsIndoors())
+        )
+    )
+    self.api:Print(
+        string.format(
+            "IsSwimming=%s IsMounted=%s IsFlying=%s",
+            tostring(IsSwimming("player")),
+            tostring(IsMounted()),
+            tostring(IsFlying("player"))
+        )
+    )
+
+    local hasAlt, inAlt = nil, nil
+    if caps.hasAlternateFormInfo then
+        hasAlt, inAlt = C_PlayerInfo.GetAlternateFormInfo()
+    end
+    local hour, minute = GetGameTime()
+    self.api:Print(
+        string.format(
+            "AlternateForm has=%s in=%s | GetGameTime=%s:%s",
+            tostring(hasAlt),
+            tostring(inAlt),
+            tostring(hour),
+            tostring(minute)
+        )
+    )
+
+    if caps.hasWeather then
+        local okWeather, weather = SafeCall(C_Weather.GetCurrentWeather)
+        self.api:Print(
+            string.format(
+                "Weather ok=%s type=%s intensity=%s",
+                tostring(okWeather),
+                tostring(weather and weather.type),
+                tostring(weather and weather.intensity)
+            )
+        )
+    end
+
+    self.api:Print("|cffffd100-- categories (name | situationID spec loadout equipSet) --|r")
+    for _, category in ipairs(ns.Triggers:GetCategories()) do
+        local result = ns.Triggers:Resolve(category.triggerID)
+        self.api:Print(
+            string.format(
+                "|cffffd100[%d] %s|r radio=%s -> state=%s situationID=%s specID=%s equipSetID=%s",
+                category.triggerID,
+                category.name,
+                tostring(category.isRadioButton),
+                tostring(result.state),
+                tostring(result.situationID),
+                tostring(result.specID),
+                tostring(result.equipmentSetID)
+            )
+        )
+
+        for _, groupData in ipairs(category.groupData or {}) do
+            for _, optionData in ipairs(groupData.optionData or {}) do
+                local option = optionData.option or {}
+                self.api:Print(
+                    string.format(
+                        "   %-28s | %s %s %s %s%s",
+                        tostring(optionData.name),
+                        tostring(option.situationID),
+                        tostring(option.specID),
+                        tostring(option.loadoutID),
+                        tostring(option.equipmentSetID),
+                        optionData.value and " |cff00ff00[assigned]|r" or ""
+                    )
+                )
+            end
+        end
+    end
+end
+
 function Diagnostics:Init(api)
     self.api = api
     self.lastSnapshot = nil
