@@ -239,11 +239,6 @@ resolvers[UI_TRIGGER.Location] = {
                 return Primary(SITUATION.LocationRaids)
             end
 
-            -- Confirmed in game: player housing reports as the "neighborhood" instance type.
-            if instanceType == "neighborhood" then
-                return Primary(SITUATION.LocationHouse)
-            end
-
             if instanceType == "party" then
                 if ns.Capabilities.hasDelves then
                     local ok, hasActiveDelve = SafeCall(C_DelvesUI.HasActiveDelve)
@@ -255,7 +250,25 @@ resolvers[UI_TRIGGER.Location] = {
                 return Primary(SITUATION.LocationDungeons)
             end
 
-            return Unknown("instanceType=" .. tostring(instanceType))
+            -- Player housing reports as the "neighborhood" instance type, but that covers
+            -- both the outdoor plots and the house interior. Only the interior is House --
+            -- Blizzard uses IsInsideHouse() for exactly this indoor/outdoor split.
+            if instanceType == "neighborhood" then
+                local insideHouse = false
+                if ns.Capabilities.hasHousing then
+                    local ok, inside = SafeCall(C_Housing.IsInsideHouse)
+                    insideHouse = (ok and inside) and true or false
+                end
+
+                if insideHouse then
+                    return Primary(SITUATION.LocationHouse)
+                end
+
+                -- Standing outdoors in the neighborhood: fall through to the open-world
+                -- handling below, which reports Rest Area when the area is rested.
+            else
+                return Unknown("instanceType=" .. tostring(instanceType))
+            end
         end
 
         if resting then

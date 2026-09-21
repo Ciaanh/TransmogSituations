@@ -178,6 +178,20 @@ function Diagnostics:PrintRawDump()
         )
     )
 
+    if caps.hasHousing then
+        local _okHouse, insideHouse = SafeCall(C_Housing.IsInsideHouse)
+        local _okPlot, insidePlot = SafeCall(C_Housing.IsInsideHouseOrPlot)
+        local _okMap, onMap = SafeCall(C_Housing.IsOnNeighborhoodMap)
+        self.api:Print(
+            string.format(
+                "Housing IsInsideHouse=%s IsInsideHouseOrPlot=%s IsOnNeighborhoodMap=%s",
+                tostring(insideHouse),
+                tostring(insidePlot),
+                tostring(onMap)
+            )
+        )
+    end
+
     local hasAlt, inAlt = nil, nil
     if caps.hasAlternateFormInfo then
         hasAlt, inAlt = C_PlayerInfo.GetAlternateFormInfo()

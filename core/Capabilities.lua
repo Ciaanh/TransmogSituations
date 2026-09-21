@@ -17,6 +17,9 @@ function Capabilities:Probe()
 
     self.hasDelves = type(C_DelvesUI) == "table" and type(C_DelvesUI.HasActiveDelve) == "function"
 
+    -- Player housing. Absent on Forever, which has no housing at all.
+    self.hasHousing = type(C_Housing) == "table" and type(C_Housing.IsInsideHouse) == "function"
+
     self.hasEquipmentSets = type(C_EquipmentSet) == "table" and
         type(C_EquipmentSet.GetEquipmentSetIDs) == "function"
 
