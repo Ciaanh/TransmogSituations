@@ -26,6 +26,16 @@ local UI_TRIGGER = {
 }
 Triggers.UI_TRIGGER = UI_TRIGGER
 
+-- Events after which the set of categories itself may differ: saving a first equipment set
+-- adds the Equipment Sets category, deleting the last removes it, and Specializations only
+-- appears from level 10. Anything caching category-derived state must react to these.
+Triggers.CATEGORY_EVENTS = {
+    "EQUIPMENT_SETS_CHANGED",
+    "PLAYER_SPECIALIZATION_CHANGED",
+    "PLAYER_LEVEL_UP",
+    "PLAYER_ENTERING_WORLD"
+}
+
 local STATE_OK = "ok"
 local STATE_UNSUPPORTED = "unsupported"
 local STATE_UNKNOWN = "unknown"
@@ -738,16 +748,12 @@ function Triggers:Init(api)
             end
         )
 
-        ns.Util.RegisterEventsSafely(
-            watcher,
-            {
-                "EQUIPMENT_SWAP_FINISHED",
-                "EQUIPMENT_SETS_CHANGED",
-                "PLAYER_SPECIALIZATION_CHANGED",
-                "PLAYER_LEVEL_UP",
-                "PLAYER_ENTERING_WORLD"
-            }
-        )
+        local events = { "EQUIPMENT_SWAP_FINISHED" }
+        for _, event in ipairs(Triggers.CATEGORY_EVENTS) do
+            table.insert(events, event)
+        end
+
+        ns.Util.RegisterEventsSafely(watcher, events)
 
         self.watcher = watcher
     end

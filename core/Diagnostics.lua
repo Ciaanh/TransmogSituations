@@ -194,24 +194,28 @@ function Diagnostics:PrintCategoriesList()
         local result = ns.Triggers:Resolve(category.triggerID)
         self.api:Print(string.format("|cffffd100[%d] %s|r", category.triggerID, category.name))
 
-        for _, groupData in ipairs(category.groupData or {}) do
-            for _, optionData in ipairs(groupData.optionData or {}) do
-                local option = optionData.option or {}
-                local isCurrent = result.state == ns.Triggers.STATE_OK and
-                    option.situationID == result.situationID and
-                    (not result.specID or option.specID == result.specID) and
-                    (not result.equipmentSetID or option.equipmentSetID == result.equipmentSetID)
-
-                local marks = ""
-                if optionData.value then
-                    marks = marks .. " |cff00ff00[assigned]|r"
-                end
-                if isCurrent then
-                    marks = marks .. " |cff00ccff[current]|r"
-                end
-
-                self.api:Print(string.format("   %s%s", optionData.name, marks))
+        -- Compare against the option the resolver actually picked rather than re-deriving
+        -- the match here; a second copy of that logic is a copy that drifts.
+        local alsoActive = {}
+        for _, situationID in ipairs(result.also or {}) do
+            local optionData = ns.Triggers:FindOptionBySituation(category.triggerID, situationID)
+            if optionData then
+                alsoActive[optionData] = true
             end
+        end
+
+        for _, optionData in ipairs(ns.Triggers:GetOptions(category.triggerID)) do
+            local marks = ""
+            if optionData.value then
+                marks = marks .. " |cff00ff00[assigned]|r"
+            end
+            if result.option and optionData.option == result.option then
+                marks = marks .. " |cff00ccff[current]|r"
+            elseif alsoActive[optionData] then
+                marks = marks .. " |cff0099cc[also active]|r"
+            end
+
+            self.api:Print(string.format("   %s%s", optionData.name, marks))
         end
     end
 end

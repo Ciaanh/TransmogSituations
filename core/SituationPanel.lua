@@ -91,7 +91,21 @@ function SituationPanel:StartTracking()
 
     self:RefreshRows()
 
-    ns.Util.RegisterEventsSafely(self.eventFrame, ns.Triggers:GetAllEvents())
+    -- GetAllEvents only covers the categories that exist right now, so on its own it would
+    -- miss the event that makes a new category appear -- saving a first equipment set while
+    -- the tab is open. Always take the category events too.
+    local events = ns.Triggers:GetAllEvents()
+    local seen = {}
+    for _, event in ipairs(events) do
+        seen[event] = true
+    end
+    for _, event in ipairs(ns.Triggers.CATEGORY_EVENTS) do
+        if not seen[event] then
+            table.insert(events, event)
+        end
+    end
+
+    ns.Util.RegisterEventsSafely(self.eventFrame, events)
 
     -- Mount/swim/fly state and the clock have no usable event, so those (and only those)
     -- need a poll, and only while the tab is actually visible.
