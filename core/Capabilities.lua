@@ -23,6 +23,11 @@ function Capabilities:Probe()
     self.hasEquipmentSets = type(C_EquipmentSet) == "table" and
         type(C_EquipmentSet.GetEquipmentSetIDs) == "function"
 
+    -- Sets can be assigned to a specialization; Blizzard sorts those first in its own
+    -- Equipment Manager, which makes the assignment a usable precedence signal.
+    self.hasSpecEquipmentSets = self.hasEquipmentSets and
+        type(C_EquipmentSet.GetEquipmentSetForSpec) == "function"
+
     self.hasAlternateFormInfo = type(C_PlayerInfo) == "table" and
         type(C_PlayerInfo.GetAlternateFormInfo) == "function"
 

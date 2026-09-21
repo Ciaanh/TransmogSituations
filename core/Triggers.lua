@@ -234,6 +234,22 @@ function Triggers:RememberAppliedSet(setID)
     db.lastAppliedSet[key] = setID
 end
 
+-- The equipment set assigned to the player's current specialization, if any.
+-- Note GetEquipmentSetForSpec takes the spec *index*, not a specID.
+function Triggers:GetSpecAssignedSetID()
+    if not ns.Capabilities.hasSpecEquipmentSets or type(C_SpecializationInfo) ~= "table" then
+        return nil
+    end
+
+    local okIndex, specIndex = SafeCall(C_SpecializationInfo.GetSpecialization)
+    if not okIndex or not specIndex then
+        return nil
+    end
+
+    local okSet, equipmentSetID = SafeCall(C_EquipmentSet.GetEquipmentSetForSpec, specIndex)
+    return okSet and equipmentSetID or nil
+end
+
 function Triggers:GetLastAppliedSetID()
     if self.lastAppliedSetID then
         return self.lastAppliedSetID
@@ -418,15 +434,30 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
         end
 
         -- Several sets can report isEquipped at once, because any set whose items you happen
-        -- to be wearing counts -- sets saved from the same gear all match. Prefer the one the
-        -- player actually applied; otherwise say the pick was arbitrary rather than hide it.
+        -- to be wearing counts -- sets saved from the same gear all match, and Blizzard's own
+        -- Equipment Manager just ticks every one of them. Break the tie deliberately.
         if #equipped > 0 then
+            -- 1. What the player actually applied. Strongest evidence of intent.
             for _, setID in ipairs(equipped) do
                 if setID == lastAppliedID then
                     return Result(STATE_OK, SITUATION.EquipmentSets, { equipmentSetID = setID })
                 end
             end
 
+            -- 2. The set assigned to the current spec. Blizzard sorts spec-assigned sets
+            --    first in SortEquipmentSetIDs, so this is their own precedence.
+            local specAssignedID = Triggers:GetSpecAssignedSetID()
+            for _, setID in ipairs(equipped) do
+                if setID == specAssignedID then
+                    return Result(
+                        STATE_OK,
+                        SITUATION.EquipmentSets,
+                        { equipmentSetID = setID, specAssigned = true }
+                    )
+                end
+            end
+
+            -- 3. Nothing distinguishes them. Pick one, but say so.
             return Result(
                 STATE_OK,
                 SITUATION.EquipmentSets,

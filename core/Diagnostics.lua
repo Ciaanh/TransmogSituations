@@ -44,6 +44,10 @@ function Diagnostics:FormatTriggerValue(entry)
         text = string.format("%s (%02d:%02d)", text, result.hour, tonumber(result.minute) or 0)
     end
 
+    if result.specAssigned then
+        text = text .. " |cff808080(assigned to this spec)|r"
+    end
+
     if result.ambiguous then
         text = string.format("%s |cff808080(%d sets match)|r", text, result.ambiguous)
     end
@@ -295,7 +299,14 @@ function Diagnostics:PrintRawDump()
     if caps.hasEquipmentSets then
         local _ok, setIDs = SafeCall(C_EquipmentSet.GetEquipmentSetIDs)
         if type(setIDs) == "table" then
-            self.api:Print(string.format("|cffffd100-- equipment sets (%d) --|r", #setIDs))
+            self.api:Print(
+                string.format(
+                    "|cffffd100-- equipment sets (%d), lastApplied=%s specAssigned=%s --|r",
+                    #setIDs,
+                    tostring(ns.Triggers:GetLastAppliedSetID()),
+                    tostring(ns.Triggers:GetSpecAssignedSetID())
+                )
+            )
             for _, setID in ipairs(setIDs) do
                 local okInfo, name, _icon, realSetID, isEquipped, numItems, numEquipped, _numInv, numLost, numIgnored =
                     ns.Util.SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
