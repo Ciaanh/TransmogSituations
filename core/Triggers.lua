@@ -126,7 +126,7 @@ end
 
 function Triggers:InvalidateCategories()
     self.categories = nil
-    self.orderedOptions = nil
+    self.options = nil
 end
 
 function Triggers:GetCategory(triggerID)
@@ -139,10 +139,13 @@ function Triggers:GetCategory(triggerID)
     return nil
 end
 
-function Triggers:GetOrderedOptions(triggerID)
-    self.orderedOptions = self.orderedOptions or {}
-    if self.orderedOptions[triggerID] then
-        return self.orderedOptions[triggerID]
+-- Every option of a category, flattened across groups. The order is whatever the client
+-- gave us and carries NO meaning: an option is identified by its situationID, never by its
+-- position. Forever omits House and Delves, which shifts every later position.
+function Triggers:GetOptions(triggerID)
+    self.options = self.options or {}
+    if self.options[triggerID] then
+        return self.options[triggerID]
     end
 
     local ordered = {}
@@ -154,7 +157,7 @@ function Triggers:GetOrderedOptions(triggerID)
         end
     end
 
-    self.orderedOptions[triggerID] = ordered
+    self.options[triggerID] = ordered
     return ordered
 end
 
@@ -165,7 +168,7 @@ function Triggers:FindOptionBySituation(triggerID, situationID)
         return nil
     end
 
-    for _, optionData in ipairs(self:GetOrderedOptions(triggerID)) do
+    for _, optionData in ipairs(self:GetOptions(triggerID)) do
         local option = optionData.option
         if option and option.situationID == situationID then
             return optionData
@@ -182,7 +185,7 @@ function Triggers:FindOptionByField(triggerID, field, value)
         return nil
     end
 
-    for _, optionData in ipairs(self:GetOrderedOptions(triggerID)) do
+    for _, optionData in ipairs(self:GetOptions(triggerID)) do
         local option = optionData.option
         if option and option[field] == value and value ~= 0 then
             return optionData
