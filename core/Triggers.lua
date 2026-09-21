@@ -433,9 +433,11 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
             end
         end
 
-        -- Several sets can report isEquipped at once, because any set whose items you happen
-        -- to be wearing counts -- sets saved from the same gear all match, and Blizzard's own
-        -- Equipment Manager just ticks every one of them. Break the tie deliberately.
+        -- Several sets can report isEquipped at once. Confirmed in game: the check is purely
+        -- "are these items on your body", so sets saved from identical gear all match
+        -- simultaneously, and Blizzard's own Equipment Manager just ticks every one of them.
+        -- Make the sets differ by a single item and only the worn one matches, which is the
+        -- common case -- but the tie still has to be broken deliberately, not by list order.
         if #equipped > 0 then
             -- 1. What the player actually applied. Strongest evidence of intent.
             for _, setID in ipairs(equipped) do
