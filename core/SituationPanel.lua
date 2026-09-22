@@ -89,6 +89,13 @@ function SituationPanel:StartTracking()
     end
     self.tracking = true
 
+    -- Opening the tab is the one moment we know for certain that an outfit is on screen and
+    -- readable. OutfitCache otherwise only hears VIEWED_TRANSMOG_OUTFIT_CHANGED, which need
+    -- not fire for the outfit that is already selected when the window opens -- leaving the
+    -- first outfit the player looks at unrecorded. RecordViewed verifies the viewed id and
+    -- the pending state itself, so this can only add what is genuinely there.
+    ns.OutfitCache:RecordViewed()
+
     self:RefreshRows()
 
     -- GetAllEvents only covers the categories that exist right now, so on its own it would

@@ -137,7 +137,6 @@ function Diagnostics:CollectSnapshot()
         end
     end
 
-    self.lastSnapshot = snapshot
     return snapshot
 end
 
@@ -149,8 +148,12 @@ function Diagnostics:PrintEnvironmentSnapshot()
         return
     end
 
+    local anyUnverified = false
     for _, entry in ipairs(snapshot.triggers) do
         self.api:Print(string.format("%s: %s", entry.categoryName, self:FormatTriggerValue(entry)))
+        if entry.result.state == ns.Triggers.STATE_OK and entry.result.unverified then
+            anyUnverified = true
+        end
     end
 
     local zone = snapshot.zone
@@ -177,7 +180,9 @@ function Diagnostics:PrintEnvironmentSnapshot()
         end
     end
 
-    self.api:Print("|cff808080* value derived from an unverified heuristic|r")
+    if anyUnverified then
+        self.api:Print("|cff808080* value derived from an unverified heuristic|r")
+    end
 end
 
 -- Full dump of the configured options for the outfit currently being viewed, with the
@@ -197,16 +202,13 @@ function Diagnostics:PrintCategoriesList()
         -- Compare against the option the resolver actually picked rather than re-deriving
         -- the match here; a second copy of that logic is a copy that drifts.
         local alsoActive = {}
-        for _, situationID in ipairs(result.also or {}) do
-            local optionData = ns.Triggers:FindOptionBySituation(category.triggerID, situationID)
-            if optionData then
-                alsoActive[optionData] = true
-            end
+        for _, optionData in ipairs(result.alsoOptions or {}) do
+            alsoActive[optionData] = true
         end
 
         for _, optionData in ipairs(ns.Triggers:GetOptions(category.triggerID)) do
             local marks = ""
-            if optionData.value then
+            if ns.OutfitCache.IsAssigned(optionData) then
                 marks = marks .. " |cff00ff00[assigned]|r"
             end
             if result.option and optionData.option == result.option then
@@ -228,14 +230,14 @@ function Diagnostics:PrintRawDump()
     self.api:Print("|cffffd100-- capabilities --|r")
     self.api:Print(
         string.format(
-            "situations=%s weather=%s(C_Weather=%s Enum.WeatherType=%s) equipmentSets=%s delves=%s loadouts=%s",
+            "situations=%s weather=%s(C_Weather=%s Enum.WeatherType=%s) equipmentSets=%s delves=%s housing=%s",
             tostring(caps.hasSituations),
             tostring(caps.hasWeather),
             type(C_Weather),
             type(Enum and Enum.WeatherType),
             tostring(caps.hasEquipmentSets),
             tostring(caps.hasDelves),
-            tostring(caps.hasTalentLoadouts)
+            tostring(caps.hasHousing)
         )
     )
 
@@ -369,18 +371,22 @@ function Diagnostics:PrintRawDump()
         end
     end
 
-    self.api:Print("|cffffd100-- categories (name | situationID spec loadout equipSet) --|r")
+    -- Two assignment columns on purpose: `value` is the flag on the option tree, `api` is
+    -- what GetOutfitSituation(option) answers -- the call Blizzard's own dropdown uses. The
+    -- cache trusts the api column; this is where a disagreement between them would show.
+    self.api:Print("|cffffd100-- categories (name | situationID spec loadout equipSet | value api) --|r")
     for _, category in ipairs(ns.Triggers:GetCategories()) do
         local result = ns.Triggers:Resolve(category.triggerID)
         self.api:Print(
             string.format(
-                "|cffffd100[%d] %s|r radio=%s -> state=%s situationID=%s specID=%s equipSetID=%s",
+                "|cffffd100[%d] %s|r radio=%s -> state=%s situationID=%s specID=%s loadoutID=%s equipSetID=%s",
                 category.triggerID,
                 category.name,
                 tostring(category.isRadioButton),
                 tostring(result.state),
                 tostring(result.situationID),
                 tostring(result.specID),
+                tostring(result.loadoutID),
                 tostring(result.equipmentSetID)
             )
         )
@@ -388,15 +394,18 @@ function Diagnostics:PrintRawDump()
         for _, groupData in ipairs(category.groupData or {}) do
             for _, optionData in ipairs(groupData.optionData or {}) do
                 local option = optionData.option or {}
+                local assigned, source = ns.OutfitCache.IsAssigned(optionData)
                 self.api:Print(
                     string.format(
-                        "   %-28s | %s %s %s %s%s",
+                        "   %-28s | %s %s %s %s | value=%s api=%s%s",
                         tostring(optionData.name),
                         tostring(option.situationID),
                         tostring(option.specID),
                         tostring(option.loadoutID),
                         tostring(option.equipmentSetID),
-                        optionData.value and " |cff00ff00[assigned]|r" or ""
+                        tostring(optionData.value),
+                        source == "api" and tostring(assigned) or "-",
+                        assigned and " |cff00ff00[assigned]|r" or ""
                     )
                 )
             end
@@ -434,21 +443,28 @@ function Diagnostics:PrintEligible()
         end
     end
 
-    local notRecorded = 0
+    -- Named, not just counted: "never viewed" and "changed since" call for different checks,
+    -- and a bare count cannot say which outfit it means.
+    local notRecorded = {}
     for _, entry in ipairs(rejected) do
-        if entry.reason == "not recorded" then
-            notRecorded = notRecorded + 1
+        if entry.reason == "not recorded" or entry.reason == "changed since last viewed" then
+            table.insert(notRecorded, entry)
         end
     end
 
-    if notRecorded > 0 then
+    if #notRecorded > 0 then
         self.api:Print(
             string.format(
-                "|cffffcc00%d of %d outfits have never been viewed, so they cannot be matched yet.|r",
-                notRecorded,
+                "|cffffcc00%d of %d outfits have never been viewed or changed since, so they cannot be matched yet:|r",
+                #notRecorded,
                 #eligible + #rejected
             )
         )
+        for _, entry in ipairs(notRecorded) do
+            self.api:Print(
+                string.format("  |cffffcc00%s (#%s) - %s|r", entry.name, tostring(entry.index), entry.reason)
+            )
+        end
         self.api:Print("Open the transmog Situations tab and click through them, or use /bs scan.")
     end
 
@@ -459,7 +475,7 @@ function Diagnostics:PrintEligible()
         end
     end
 
-    if #unrecorded == 0 and notRecorded == 0 then
+    if #unrecorded == 0 and #notRecorded == 0 then
         self.api:Print(string.format("|cff808080All %d outfits recorded.|r", ns.OutfitCache:Count()))
     end
 end
@@ -483,13 +499,44 @@ function Diagnostics:PrintVerify()
 
     if report.agrees then
         self.api:Print("|cff00ff00Prediction agrees.|r")
+    elseif not report.activeRecorded then
+        -- Not a disagreement: the outfit Blizzard applied has no usable cache entry, so it
+        -- was rejected before a single rule was consulted. Saying "the rules are incomplete"
+        -- here would be an accusation the run cannot support.
+        self.api:Print(
+            string.format(
+                "|cffffcc00Not scored: %s has never been viewed, or has changed since, so it could not be matched at all.|r",
+                self:DescribeOutfit(report.activeOutfitID, outfitsByID)
+            )
+        )
+        self.api:Print("Open the transmog Situations tab and click through your outfits, or use /bs scan, then try again.")
+    elseif report.activeSpecificity then
+        -- The applied outfit is eligible too, so the matching rules held and only the pick
+        -- differs. Blizzard says ties are broken at random; what this run can say is whether
+        -- the outfits were tied under our specificity count.
+        if report.activeSpecificity == report.predictedSpecificity then
+            self.api:Print(
+                string.format(
+                    "|cffffcc00Tie: both are eligible with %d constrained categories - Blizzard picks among equals at random.|r",
+                    report.activeSpecificity
+                )
+            )
+        else
+            self.api:Print(
+                string.format(
+                    "|cffff5555Tiebreak disagrees: Blizzard applied an eligible outfit constraining %d categories over one constraining %d. Evidence against ranking by specificity.|r",
+                    report.activeSpecificity,
+                    tonumber(report.predictedSpecificity) or 0
+                )
+            )
+        end
     else
-        self.api:Print("|cffff5555Prediction disagrees - the matching rules are incomplete.|r")
+        self.api:Print("|cffff5555Prediction disagrees - the outfit Blizzard applied does not match our rules.|r")
     end
 
     self.api:Print(
         string.format(
-            "|cff808080%d outfits recorded, %d never viewed.|r",
+            "|cff808080%d outfits recorded, %d never viewed or changed since.|r",
             report.recorded,
             report.unrecorded
         )
@@ -498,5 +545,4 @@ end
 
 function Diagnostics:Init(api)
     self.api = api
-    self.lastSnapshot = nil
 end

@@ -5,42 +5,74 @@ local _, ns = ...
 -- There is no API that answers "which situations is outfit N bound to". GetOutfitSituation
 -- only ever answers for the *currently viewed* outfit, and GetOutfitsInfo's
 -- situationCategories is a table of localized category names -- lossy, and useless for
--- matching. What we do have is that every option in the category tree carries a `value` flag
--- which IS the viewed outfit's assignment. So each time the player looks at an outfit we can
--- write its whole assignment down, and the picture fills in as they browse.
+-- matching. So each time the player looks at an outfit we write its whole assignment down,
+-- and the picture fills in as they browse.
+--
+-- How an assignment is read matters. Blizzard's own dropdown decides whether an option is
+-- ticked by calling C_TransmogOutfitInfo.GetOutfitSituation(option)
+-- (Blizzard_TransmogTemplates.lua, TransmogSituationMixin:Init); it never reads the `value`
+-- flag the option tree also carries. Confirmed in game on Forever (2026-09-22): with an outfit
+-- viewed, the api answered true for every "All" option while `value` was false on all of them.
+-- So GetOutfitSituation is the source of truth and `value` is only the fallback for a client
+-- where that call is missing or refuses us (it is declared AllowedWhenUntainted).
+--
+-- The same capture shows what "unconstrained" means to the client: an outfit whose
+-- situationCategories list is empty has every "All" option ticked. So a fresh outfit is all
+-- wildcards, never "nothing selected", and situationCategories names exactly the categories
+-- with a non-wildcard selection.
 
 local OutfitCache = {}
 ns.OutfitCache = OutfitCache
 
--- Spec and equipment-set options share one situationID and differ only by a secondary id, so
--- an option's identity is the triple. Anything comparing assignments must use this.
+-- The viewed outfit's assignment for one option, the way Blizzard reads it. Returns the
+-- boolean plus which source answered, so /bs dump can show both side by side.
+function OutfitCache.IsAssigned(optionData)
+    if not optionData or not optionData.option then
+        return false, "none"
+    end
+
+    if ns.Capabilities.hasSituations and type(C_TransmogOutfitInfo.GetOutfitSituation) == "function" then
+        local ok, assigned = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitSituation, optionData.option)
+        if ok and type(assigned) == "boolean" then
+            return assigned, "api"
+        end
+    end
+
+    return optionData.value and true or false, "value"
+end
+
+-- Spec, loadout and equipment-set options share one situationID and differ only by their
+-- secondary ids, so an option's identity is the full 4-tuple. loadoutID is not optional: a
+-- saved talent loadout's option carries the same specID as its spec's option and differs only
+-- there (confirmed on Retail). Anything comparing assignments must use this.
 function OutfitCache.OptionKey(option)
     if not option then
         return nil
     end
 
     return string.format(
-        "%d:%d:%d",
+        "%d:%d:%d:%d",
         tonumber(option.situationID) or 0,
         tonumber(option.specID) or 0,
+        tonumber(option.loadoutID) or 0,
         tonumber(option.equipmentSetID) or 0
     )
 end
 
-local function CharacterKey()
-    local name = UnitName and UnitName("player") or nil
-    if not name then
-        return nil
-    end
-
-    return string.format("%s-%s", name, (GetRealmName and GetRealmName()) or "")
-end
+-- Bumped whenever the key format or the entry shape changes. Entries written by an older
+-- format are dropped rather than misread: a 3-part key would silently merge every loadout of a
+-- spec into the spec itself.
+local STORE_VERSION = 2
 
 function OutfitCache:GetStore(create)
     local db = ns.BetterSituation and ns.BetterSituation.db
-    local key = CharacterKey()
+    local key = ns.Util.CharacterKey()
     if not db or not key then
         return nil
+    end
+
+    if db.outfitSituations and db.outfitSituationsVersion ~= STORE_VERSION then
+        db.outfitSituations = nil
     end
 
     if not db.outfitSituations then
@@ -48,6 +80,7 @@ function OutfitCache:GetStore(create)
             return nil
         end
         db.outfitSituations = {}
+        db.outfitSituationsVersion = STORE_VERSION
     end
 
     if not db.outfitSituations[key] then
@@ -71,6 +104,19 @@ function OutfitCache:RecordViewed()
         return nil
     end
 
+    -- GetOutfitSituation answers with the *pending* state while the player is editing on the
+    -- Situations tab, and VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED fires for every such
+    -- edit. Recording then would store what they might never apply. Wait for the commit.
+    local okPending, pending = ns.Util.SafeCall(C_TransmogOutfitInfo.HasPendingOutfitSituations)
+    if okPending and pending then
+        return nil
+    end
+
+    -- The cached tree is a snapshot of one outfit's flags. Drop it here rather than trusting
+    -- that the Triggers watcher's handler ran before ours -- that only held by frame
+    -- creation order, which is nothing to build on.
+    ns.Triggers:InvalidateCategories()
+
     local categories = ns.Triggers:GetCategories()
     if #categories == 0 then
         return nil
@@ -84,7 +130,7 @@ function OutfitCache:RecordViewed()
         local any = false
 
         for _, optionData in ipairs(ns.Triggers:GetOptions(category.triggerID)) do
-            if optionData.value then
+            if OutfitCache.IsAssigned(optionData) then
                 local key = OutfitCache.OptionKey(optionData.option)
                 if key then
                     selected.keys[key] = true
@@ -119,6 +165,57 @@ function OutfitCache:Get(outfitID)
     return store and store[outfitID] or nil
 end
 
+-- Whether a recorded entry no longer describes the outfit. An entry is written only while the
+-- outfit is viewed, so an edit committed without a later recording -- Defaults + Apply, then
+-- clicking straight to another outfit -- leaves it describing assignments the outfit no longer
+-- has. Confirmed in game on Forever (2026-09-22): "hoo" was reset to all wildcards, the cache
+-- still held Rest Area + Unmounted, and /bs verify predicted hoo over the real active outfit.
+--
+-- GetOutfitsInfo's situationCategories names exactly the categories with a non-wildcard
+-- selection (confirmed on both clients), so it is a free check on every entry. The names are
+-- localized, but so are the category names they are compared with, from the same session.
+-- Returns false whenever the check cannot be made, so it can only ever demote an entry.
+function OutfitCache:IsStale(outfitID, info)
+    local entry = self:Get(outfitID)
+    if not entry or type(info) ~= "table" or type(info.situationCategories) ~= "table" then
+        return false
+    end
+
+    local categories = ns.Triggers:GetCategories()
+    if #categories == 0 then
+        return false
+    end
+
+    local names = {}
+    for _, category in ipairs(categories) do
+        names[category.triggerID] = category.name
+    end
+
+    local expected = {}
+    for _, name in ipairs(info.situationCategories) do
+        expected[name] = true
+    end
+
+    local recorded = {}
+    for triggerID, selected in pairs(entry.categories) do
+        if selected.any and not selected.wildcard then
+            local name = names[triggerID]
+            if not name or not expected[name] then
+                return true
+            end
+            recorded[name] = true
+        end
+    end
+
+    for name in pairs(expected) do
+        if not recorded[name] then
+            return true
+        end
+    end
+
+    return false
+end
+
 function OutfitCache:Count()
     local store = self:GetStore(false)
     if not store then
@@ -151,17 +248,50 @@ function OutfitCache:Clear()
     end
 end
 
--- Outfits the client knows about that we have never seen the player view.
+-- Drop entries for outfits the client no longer lists. Deleted outfits would otherwise sit in
+-- SavedVariables forever, inflate Count(), and -- should the client ever reuse an id -- hand a
+-- new outfit a dead one's assignments. Returns how many were dropped.
+function OutfitCache:Prune(outfits)
+    local store = self:GetStore(false)
+    if not store then
+        return 0
+    end
+
+    local live = {}
+    for _, info in ipairs(outfits or {}) do
+        live[info.outfitID] = true
+    end
+
+    local dropped = 0
+    for outfitID in pairs(store) do
+        if not live[outfitID] then
+            store[outfitID] = nil
+            dropped = dropped + 1
+        end
+    end
+
+    return dropped
+end
+
+-- Outfits the client knows about that we have no usable entry for: never viewed, or changed
+-- since they were (IsStale). Also the one place that sees the full outfit list, so entries for
+-- deleted outfits are pruned here. /bs scan re-records whatever this returns.
 function OutfitCache:GetUnrecordedOutfits()
     local missing = {}
+
+    if not ns.Capabilities.hasSituations then
+        return missing
+    end
 
     local ok, outfits = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
     if not ok or type(outfits) ~= "table" then
         return missing
     end
 
+    self:Prune(outfits)
+
     for _, info in ipairs(outfits) do
-        if not self:Get(info.outfitID) then
+        if not self:Get(info.outfitID) or self:IsStale(info.outfitID, info) then
             table.insert(missing, info)
         end
     end
@@ -274,7 +404,6 @@ function OutfitCache:Scan(onDone)
                 return
             end
 
-            ns.Triggers:InvalidateCategories()
             if self:RecordViewed() then
                 recorded = recorded + 1
             else
@@ -294,8 +423,8 @@ function OutfitCache:Init(api)
         return
     end
 
-    -- Record whenever the viewed outfit or its assignments change. The category tree is
-    -- invalidated on these same events, so by the time we read it the flags are fresh.
+    -- Record whenever the viewed outfit or its assignments change. RecordViewed itself skips
+    -- the calls made mid-edit, so the commit (or the next view) is what gets written down.
     local watcher = CreateFrame("Frame")
     watcher:SetScript(
         "OnEvent",
@@ -305,7 +434,38 @@ function OutfitCache:Init(api)
     )
     ns.Util.RegisterEventsSafely(
         watcher,
-        { "VIEWED_TRANSMOG_OUTFIT_CHANGED", "VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED" }
+        {
+            "VIEWED_TRANSMOG_OUTFIT_CHANGED",
+            "VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED",
+            -- Fired when the outfit list is rebuilt, which is how the list label picks up a
+            -- committed edit. Cheap insurance for the commit path below.
+            "TRANSMOG_OUTFITS_CHANGED"
+        }
     )
     self.watcher = watcher
+
+    -- The Situations tab's Apply button calls CommitPendingSituations and nothing else
+    -- (Blizzard_Transmog.lua, TransmogWardrobeSituationsMixin:OnLoad, both clients). Every
+    -- event fired during the edit was skipped as pending, so without this the committed
+    -- assignment is only written down if the player happens to view the outfit again.
+    -- A post-hook on the api table does not taint the caller. Deferred one frame so the
+    -- pending state has certainly cleared.
+    if type(C_TransmogOutfitInfo.CommitPendingSituations) == "function" then
+        hooksecurefunc(
+            C_TransmogOutfitInfo,
+            "CommitPendingSituations",
+            function()
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(
+                        0,
+                        function()
+                            self:RecordViewed()
+                        end
+                    )
+                else
+                    self:RecordViewed()
+                end
+            end
+        )
+    end
 end

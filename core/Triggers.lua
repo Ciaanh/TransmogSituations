@@ -179,7 +179,14 @@ function Triggers:GetOptions(triggerID)
     local ordered = {}
     local category = self:GetCategory(triggerID)
 
-    for _, groupData in ipairs(category and category.groupData or {}) do
+    -- No category yet (the tree may not have been fetched, or this row is one Blizzard
+    -- built before our fetch succeeded): answer empty, but don't remember it. Caching the
+    -- miss would pin the row to "no option" until the next category event.
+    if not category then
+        return ordered
+    end
+
+    for _, groupData in ipairs(category.groupData or {}) do
         for _, optionData in ipairs(groupData.optionData or {}) do
             table.insert(ordered, optionData)
         end
@@ -207,19 +214,28 @@ function Triggers:FindOptionBySituation(triggerID, situationID)
 end
 
 -- Specializations and Equipment Sets have a variable number of options that all share one
--- situationID, so they are told apart by the id the option carries. Both must match:
--- equipment set ids start at 0, and "All Equipment Sets" also carries equipmentSetID 0, so
--- the field alone is ambiguous. The situationID is what separates the All row (18) from a
--- specific set (19), exactly as it separates All Specializations (1) from a spec (2).
-function Triggers:FindOptionBySituationAndField(triggerID, situationID, field, value)
-    if value == nil then
-        return nil
-    end
-
+-- situationID, so they are told apart by the ids the option carries. Every field given must
+-- match: equipment set ids start at 0 and "All Equipment Sets" also carries equipmentSetID 0,
+-- so a field alone is ambiguous -- the situationID separates the All row (18) from a specific
+-- set (19), exactly as it separates All Specializations (1) from a spec (2). Specializations
+-- go one level deeper: the per-spec option carries loadoutID 0 and each saved talent loadout
+-- gets its own option with the same specID and its configID as loadoutID (confirmed on Retail),
+-- so loadoutID must be part of the match or a loadout option is mistaken for its spec.
+function Triggers:FindOptionBySituationAndFields(triggerID, situationID, fields)
     for _, optionData in ipairs(self:GetOptions(triggerID)) do
         local option = optionData.option
-        if option and option.situationID == situationID and option[field] == value then
-            return optionData
+        if option and option.situationID == situationID then
+            local all = true
+            for field, value in pairs(fields) do
+                if option[field] ~= value then
+                    all = false
+                    break
+                end
+            end
+
+            if all then
+                return optionData
+            end
         end
     end
 
@@ -235,21 +251,11 @@ end
 -- player last applied can be tracked and remembered across sessions.
 --------------------------------------------------------------------------------
 
-local function GetCharacterKey()
-    local name = UnitName and UnitName("player") or nil
-    local realm = GetRealmName and GetRealmName() or nil
-    if not name then
-        return nil
-    end
-
-    return string.format("%s-%s", name, realm or "")
-end
-
 function Triggers:RememberAppliedSet(setID)
     self.lastAppliedSetID = setID
 
     local db = ns.BetterSituation and ns.BetterSituation.db
-    local key = GetCharacterKey()
+    local key = ns.Util.CharacterKey()
     if not db or not key then
         return
     end
@@ -280,7 +286,7 @@ function Triggers:GetLastAppliedSetID()
     end
 
     local db = ns.BetterSituation and ns.BetterSituation.db
-    local key = GetCharacterKey()
+    local key = ns.Util.CharacterKey()
     if db and key and db.lastAppliedSet then
         self.lastAppliedSetID = db.lastAppliedSet[key]
     end
@@ -320,6 +326,16 @@ resolvers[UI_TRIGGER.Location] = {
         end
 
         if inInstance then
+            -- Delves first, independent of the instance type. Blizzard's own instance banner
+            -- (InstanceDifficultyMixin:IsInDelve) asks C_DelvesUI.HasActiveDelve() without
+            -- looking at the type, and delves are reported as "scenario" as often as "party".
+            if ns.Capabilities.hasDelves then
+                local ok, hasActiveDelve = SafeCall(C_DelvesUI.HasActiveDelve)
+                if ok and hasActiveDelve then
+                    return Primary(SITUATION.LocationDelves)
+                end
+            end
+
             if instanceType == "arena" then
                 return Primary(SITUATION.LocationArenas)
             end
@@ -333,20 +349,14 @@ resolvers[UI_TRIGGER.Location] = {
             end
 
             if instanceType == "party" then
-                if ns.Capabilities.hasDelves then
-                    local ok, hasActiveDelve = SafeCall(C_DelvesUI.HasActiveDelve)
-                    if ok and hasActiveDelve then
-                        return Primary(SITUATION.LocationDelves)
-                    end
-                end
-
                 return Primary(SITUATION.LocationDungeons)
             end
 
-            -- Player housing reports as the "neighborhood" instance type, but that covers
-            -- both the outdoor plots and the house interior. Only the interior is House --
-            -- Blizzard uses IsInsideHouse() for exactly this indoor/outdoor split.
-            if instanceType == "neighborhood" then
+            -- Player housing. Confirmed on Retail (2026-09-22): the outdoor plots report as
+            -- "neighborhood" and the inside of a house as "interior" -- the two types Blizzard's
+            -- instance banner hides itself for. Either way only IsInsideHouse() decides House;
+            -- it is the exact indoor/outdoor split Blizzard uses.
+            if instanceType == "neighborhood" or instanceType == "interior" then
                 local insideHouse = false
                 if ns.Capabilities.hasHousing then
                     local ok, inside = SafeCall(C_Housing.IsInsideHouse)
@@ -357,8 +367,8 @@ resolvers[UI_TRIGGER.Location] = {
                     return Primary(SITUATION.LocationHouse)
                 end
 
-                -- Standing outdoors in the neighborhood: fall through to the open-world
-                -- handling below, which reports Rest Area when the area is rested.
+                -- Standing outdoors on the plots: fall through to the open-world handling
+                -- below, which reports Rest Area when the area is rested.
             else
                 return Unknown("instanceType=" .. tostring(instanceType))
             end
@@ -395,7 +405,16 @@ resolvers[UI_TRIGGER.Movement] = {
 }
 
 resolvers[UI_TRIGGER.Specialization] = {
-    events = { "PLAYER_SPECIALIZATION_CHANGED", "TRAIT_CONFIG_UPDATED", "PLAYER_ENTERING_WORLD" },
+    -- The loadout events exist on both clients (ClassTalentsDocumentation.lua); registration
+    -- is defensive anyway.
+    events = {
+        "PLAYER_SPECIALIZATION_CHANGED",
+        "SELECTED_LOADOUT_CHANGED",
+        "ACTIVE_COMBAT_CONFIG_CHANGED",
+        "TRAIT_CONFIG_UPDATED",
+        "TRAIT_CONFIG_LIST_UPDATED",
+        "PLAYER_ENTERING_WORLD"
+    },
     Resolve = function()
         if type(C_SpecializationInfo) ~= "table" then
             return Unsupported("C_SpecializationInfo")
@@ -416,10 +435,15 @@ resolvers[UI_TRIGGER.Specialization] = {
             return Unknown("no specialization chosen")
         end
 
+        -- Saved talent loadouts are options of their own (specID + loadoutID), listed next to
+        -- the per-spec option (specID + loadoutID 0). Blizzard's talent frame identifies the
+        -- current one with GetLastSelectedSavedConfigID(specID); nil means no saved loadout is
+        -- selected (fresh character, or the starter build). Whether Blizzard still counts a
+        -- loadout that has unsaved changes is unknown -- /bs verify will tell.
         local loadoutID = nil
         if ns.Capabilities.hasTalentLoadouts then
-            local okLoadout, configID = SafeCall(C_ClassTalents.GetActiveConfigID)
-            if okLoadout then
+            local okLoadout, configID = SafeCall(C_ClassTalents.GetLastSelectedSavedConfigID, specID)
+            if okLoadout and type(configID) == "number" and configID > 0 then
                 loadoutID = configID
             end
         end
@@ -618,18 +642,48 @@ Triggers.resolvers = resolvers
 
 -- Attach the client's own option to a resolved value: its localized name, and confirmation
 -- that this client offers the situation at all.
+--
+-- Several categories are multi-valued, and the resolvers express that in two ways: Locations
+-- lists extra situationIDs in `also` (a house is also a rest area), and Specializations is
+-- both the spec and, when one is selected, the saved loadout (specID + loadoutID). Both are
+-- normalised here into `result.alsoOptions`, the other option entries that are true right now,
+-- so no consumer has to know how a category spells its secondary values.
 function Triggers:AttachOption(triggerID, result)
     if result.state ~= STATE_OK then
         return result
     end
 
     local optionData = nil
+    local alsoOptions = {}
 
     if result.specID then
-        optionData = self:FindOptionBySituationAndField(triggerID, result.situationID, "specID", result.specID)
+        -- The per-spec option is the one every client lists; a loadout option is more specific
+        -- and becomes the value when this client offers it, with the spec option kept alongside.
+        local specOption =
+            self:FindOptionBySituationAndFields(triggerID, result.situationID, { specID = result.specID, loadoutID = 0 })
+        local loadoutOption = nil
+        if result.loadoutID then
+            loadoutOption = self:FindOptionBySituationAndFields(
+                triggerID,
+                result.situationID,
+                { specID = result.specID, loadoutID = result.loadoutID }
+            )
+        end
+
+        if loadoutOption then
+            optionData = loadoutOption
+            if specOption then
+                table.insert(alsoOptions, specOption)
+            end
+        else
+            optionData = specOption
+        end
     elseif result.equipmentSetID then
-        optionData =
-            self:FindOptionBySituationAndField(triggerID, result.situationID, "equipmentSetID", result.equipmentSetID)
+        optionData = self:FindOptionBySituationAndFields(
+            triggerID,
+            result.situationID,
+            { equipmentSetID = result.equipmentSetID }
+        )
     else
         optionData = self:FindOptionBySituation(triggerID, result.situationID)
     end
@@ -648,9 +702,17 @@ function Triggers:AttachOption(triggerID, result)
         return result
     end
 
+    -- Secondary situationIDs from the resolver. Silently skips any this client doesn't offer.
+    for _, situationID in ipairs(result.also or {}) do
+        local alsoData = self:FindOptionBySituation(triggerID, situationID)
+        if alsoData then
+            table.insert(alsoOptions, alsoData)
+        end
+    end
+
     result.optionName = optionData.name
     result.option = optionData.option
-    result.isAssigned = optionData.value and true or false
+    result.alsoOptions = alsoOptions
 
     return result
 end
@@ -674,16 +736,13 @@ function Triggers:GetDisplayName(triggerID, result)
     return result and result.optionName or nil
 end
 
--- The other situations that are also true right now (Locations is multi-valued), as the
--- client's own display names. Silently skips any this client doesn't offer.
-function Triggers:GetAlsoNames(triggerID, result)
+-- The other options that are also true right now (a house is also a rest area; a loadout is
+-- also its spec), as the client's own display names.
+function Triggers:GetAlsoNames(_triggerID, result)
     local names = {}
 
-    for _, situationID in ipairs(result and result.also or {}) do
-        local optionData = self:FindOptionBySituation(triggerID, situationID)
-        if optionData then
-            table.insert(names, optionData.name)
-        end
+    for _, optionData in ipairs(result and result.alsoOptions or {}) do
+        table.insert(names, optionData.name)
     end
 
     return names

@@ -86,8 +86,23 @@ function StatusPanel:Create()
         end
     )
 
-    frame:SetScript("OnShow", function() self:StartTracking() end)
-    frame:SetScript("OnHide", function() self:StopTracking() end)
+    -- Persist visibility from the frame's own scripts, not from Show()/Hide(): Escape closes
+    -- the panel through UISpecialFrames without going through our methods, and the saved
+    -- state must follow whichever path hid it or the panel comes back on the next login.
+    frame:SetScript(
+        "OnShow",
+        function()
+            self:SaveShown(true)
+            self:StartTracking()
+        end
+    )
+    frame:SetScript(
+        "OnHide",
+        function()
+            self:SaveShown(false)
+            self:StopTracking()
+        end
+    )
 
     frame.rows = {}
     frame:Hide()
@@ -243,23 +258,20 @@ function StatusPanel:StopTracking()
     end
 end
 
-function StatusPanel:Show()
-    self:Create():Show()
-
+function StatusPanel:SaveShown(shown)
     local saved = EnsureSaved()
     if saved then
-        saved.shown = true
+        saved.shown = shown
     end
+end
+
+function StatusPanel:Show()
+    self:Create():Show()
 end
 
 function StatusPanel:Hide()
     if self.frame then
         self.frame:Hide()
-    end
-
-    local saved = EnsureSaved()
-    if saved then
-        saved.shown = false
     end
 end
 
