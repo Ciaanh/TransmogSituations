@@ -735,26 +735,6 @@ function Triggers:ResolveAll()
     return resolved
 end
 
--- The union of the events the *active* categories care about. Restricted to categories the
--- client actually offers, so we never try to register an event this client doesn't know --
--- RegisterEvent throws on an unknown event name, and WEATHER_CHANGED is exactly that on
--- Retail. Callers should still register defensively; see ns.Util.RegisterEventsSafely.
-function Triggers:GetAllEvents()
-    local seen, events = {}, {}
-
-    for _, category in ipairs(self:GetCategories()) do
-        local resolver = resolvers[category.triggerID]
-        for _, event in ipairs(resolver and resolver.events or {}) do
-            if not seen[event] then
-                seen[event] = true
-                table.insert(events, event)
-            end
-        end
-    end
-
-    return events
-end
-
 -- True when at least one active category can only be tracked by polling.
 function Triggers:NeedsPolling()
     for _, category in ipairs(self:GetCategories()) do
@@ -767,40 +747,142 @@ function Triggers:NeedsPolling()
     return false
 end
 
+--------------------------------------------------------------------------------
+-- Change notifications
+--
+-- The one place the addon listens to the game. Triggers registers every event any resolver
+-- or consumer cares about, handles it first (drop the category cache, remember an applied
+-- equipment set), and only then tells the subscribers, in the order they subscribed. So a
+-- subscriber always reads a model that has already caught up with the event -- the ordering
+-- that four separate event frames could only get right by accident.
+--
+-- A subscriber is fn(event, ...). Subscribers that asked for polling are also called with
+-- "POLL" while the active categories include one with no usable event (mount, swim and fly
+-- state, the clock), and only while at least one such subscriber is subscribed.
+--------------------------------------------------------------------------------
+
+local POLL_INTERVAL = 1.5
+
+-- Outfit events are not about any trigger's value, but the outfit cache needs them, and
+-- delivering them through here is what orders them after the category cache is dropped.
+local OUTFIT_EVENTS = { "TRANSMOG_OUTFITS_CHANGED" }
+
+local subscribers = {}
+
+local function IsCategoryEvent(event)
+    for _, e in ipairs(Triggers.CATEGORY_EVENTS) do
+        if e == event then
+            return true
+        end
+    end
+    return false
+end
+
+function Triggers:Notify(event, ...)
+    if event == "EQUIPMENT_SWAP_FINISHED" then
+        local result, setID = ...
+        if result and setID then
+            self:RememberAppliedSet(setID)
+        end
+    end
+
+    -- Which categories exist is not fixed for the session. Saving a first equipment set adds
+    -- the Equipment Sets category, deleting the last one removes it, and Specializations only
+    -- appears from level 10. Caching the category list forever meant those never showed up
+    -- without a /reload.
+    if IsCategoryEvent(event) then
+        self:InvalidateCategories()
+        self:UpdatePolling()
+    end
+
+    -- Copied first: a subscriber may unsubscribe (a panel hiding) while being notified.
+    local snapshot = {}
+    for i, subscriber in ipairs(subscribers) do
+        snapshot[i] = subscriber
+    end
+    for _, subscriber in ipairs(snapshot) do
+        subscriber.fn(event, ...)
+    end
+end
+
+function Triggers:Subscribe(fn, wantsPolling)
+    self:Unsubscribe(fn)
+    table.insert(subscribers, { fn = fn, poll = wantsPolling and true or false })
+    self:UpdatePolling()
+end
+
+function Triggers:Unsubscribe(fn)
+    for i = #subscribers, 1, -1 do
+        if subscribers[i].fn == fn then
+            table.remove(subscribers, i)
+        end
+    end
+    self:UpdatePolling()
+end
+
+-- One ticker for the whole addon, running only while someone who asked for it is listening
+-- and a polled category exists.
+function Triggers:UpdatePolling()
+    local wanted = false
+    for _, subscriber in ipairs(subscribers) do
+        if subscriber.poll then
+            wanted = true
+        end
+    end
+    wanted = wanted and self:NeedsPolling()
+
+    if wanted and not self.ticker then
+        self.ticker = C_Timer.NewTicker(
+            POLL_INTERVAL,
+            function()
+                for _, subscriber in ipairs(subscribers) do
+                    if subscriber.poll then
+                        subscriber.fn("POLL")
+                    end
+                end
+            end
+        )
+    elseif not wanted and self.ticker then
+        self.ticker:Cancel()
+        self.ticker = nil
+    end
+end
+
 function Triggers:Init()
     self:InvalidateCategories()
 
-    -- Must listen all the time, not just while the Situations tab is open: we would miss
-    -- the swap that says which set is worn, and the category list can change composition
-    -- while the tab is shut.
-    if not self.watcher then
-        local watcher = CreateFrame("Frame")
-        watcher:SetScript(
-            "OnEvent",
-            function(_, event, ...)
-                if event == "EQUIPMENT_SWAP_FINISHED" then
-                    local result, setID = ...
-                    if result and setID then
-                        self:RememberAppliedSet(setID)
-                    end
-                    return
-                end
-
-                -- Which categories exist is not fixed for the session. Saving a first
-                -- equipment set adds the Equipment Sets category, deleting the last one
-                -- removes it, and Specializations only appears from level 10. Caching the
-                -- category list forever meant those never showed up without a /reload.
-                self:InvalidateCategories()
-            end
-        )
-
-        local events = { "EQUIPMENT_SWAP_FINISHED" }
-        for _, event in ipairs(Triggers.CATEGORY_EVENTS) do
-            table.insert(events, event)
-        end
-
-        ns.Util.RegisterEventsSafely(watcher, events)
-
-        self.watcher = watcher
+    if self.watcher then
+        return
     end
+
+    -- Every event of every resolver, not just the active categories': a category can appear
+    -- mid-session, and registering is cheap. RegisterEventsSafely skips the names this client
+    -- does not know -- WEATHER_CHANGED on Retail -- since RegisterEvent throws on those.
+    local seen, events = {}, {}
+    local function Add(list)
+        for _, event in ipairs(list) do
+            if not seen[event] then
+                seen[event] = true
+                table.insert(events, event)
+            end
+        end
+    end
+    Add({ "EQUIPMENT_SWAP_FINISHED" })
+    Add(Triggers.CATEGORY_EVENTS)
+    Add(OUTFIT_EVENTS)
+    for _, resolver in pairs(resolvers) do
+        Add(resolver.events or {})
+    end
+
+    -- Listens all the time, not just while a panel is open: we would otherwise miss the swap
+    -- that says which set is worn, and the category list can change while everything is shut.
+    local watcher = CreateFrame("Frame")
+    watcher:SetScript(
+        "OnEvent",
+        function(_, event, ...)
+            self:Notify(event, ...)
+        end
+    )
+    ns.Util.RegisterEventsSafely(watcher, events)
+    self.watcher = watcher
 end

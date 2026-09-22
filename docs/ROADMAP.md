@@ -396,7 +396,8 @@ candidate outfits in the outfit list).
 - **No taint.** Child frames and `hooksecurefunc` only; never replace pooled frames or touch the
   dropdown menu descriptions.
 - **Everything reads `ns.Triggers`.** Chat, the tab overlay, the standalone panel and the
-  eligibility matcher are four renderers over one model. Adding a fifth consumer means reading
+  eligibility matcher are four renderers over one model, and `Triggers` is the only event
+  listener (consumers subscribe). Adding a fifth consumer means reading
   `ResolveAll()`, never re-deriving a value.
 
 ## Module map

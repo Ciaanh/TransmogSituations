@@ -28,7 +28,7 @@ run() {
 }
 
 echo "-- tests --"
-for t in replay_retail replay_retail_loadouts replay_forever replay_forever_viewed          resolvers equipment_sets cache_invalidation attach_retry list_marking eligibility; do
+for t in replay_retail replay_retail_loadouts replay_forever replay_forever_viewed          resolvers equipment_sets cache_invalidation attach_retry list_marking eligibility panels; do
     run "$t" "docs/tests/$t.lua" .
 done
 

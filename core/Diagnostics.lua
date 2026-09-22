@@ -1,7 +1,8 @@
 local _, ns = ...
 
--- Chat-facing reporting. All situation values come from ns.Triggers; this module only
--- formats them, plus the few context details (zone, clock) that are not triggers.
+-- All reporting. Situation values come from ns.Triggers; this module formats them -- for chat
+-- and, through FormatValue, for both panels -- plus the few context details (zone, clock) that
+-- are not triggers.
 
 local Diagnostics = {}
 ns.Diagnostics = Diagnostics
@@ -11,33 +12,53 @@ local SafeCall = ns.Util.SafeCall
 local UNSUPPORTED_TEXT = "|cff808080n/a|r"
 local UNKNOWN_TEXT = "|cffffcc00?|r"
 
--- Renders one resolved trigger. The value itself is the client's own localized option name;
--- we only add the markers and any numeric detail the option name can't carry.
-function Diagnostics:FormatTriggerValue(entry)
-    local result = entry.result
+-- The one rendering of a resolved value, at three levels of detail:
+--   "value"   the Situations tab row: the value alone. No reason, no markers -- a decision,
+--             not an oversight (the row has no room, and /bs is where detail lives).
+--   "compact" the standalone panel: adds "+N" for the other options true right now and "~"
+--             when the value is approximate or ambiguous.
+--   "full"    chat: everything, with inline colour codes.
+-- The value itself is always the client's own localized option name. Returns the text, and
+-- whether it is a real value (false for the n/a and ? placeholders) so a frame can grey it.
+function Diagnostics:FormatValue(result, detail)
+    local full = (detail == "full")
 
     if result.state == ns.Triggers.STATE_UNSUPPORTED then
-        return UNSUPPORTED_TEXT
+        -- Rendering nothing would be indistinguishable from a broken row.
+        return full and UNSUPPORTED_TEXT or "n/a", false
     end
 
-    if result.state == ns.Triggers.STATE_UNKNOWN then
-        -- Chat has room for the reason; the inline row on the Situations tab does not.
-        if result.reason then
-            return string.format("%s |cff808080(%s)|r", UNKNOWN_TEXT, result.reason)
+    if result.state ~= ns.Triggers.STATE_OK or not result.optionName then
+        if full and result.reason then
+            return string.format("%s |cff808080(%s)|r", UNKNOWN_TEXT, result.reason), false
         end
-
-        return UNKNOWN_TEXT
+        return full and UNKNOWN_TEXT or "?", false
     end
 
-    local text = result.optionName or UNKNOWN_TEXT
+    local text = result.optionName
+    local also = result.alsoOptions or {}
+
+    if detail == "compact" then
+        if #also > 0 then
+            text = string.format("%s +%d", text, #also)
+        end
+        if result.approximate or result.ambiguous then
+            text = text .. " ~"
+        end
+        return text, true
+    end
+
+    if not full then
+        return text, true
+    end
 
     -- Multi-valued categories: a house is also a rest area, a loadout is also its spec.
-    local alsoNames = {}
-    for _, optionData in ipairs(result.alsoOptions or {}) do
-        table.insert(alsoNames, optionData.name)
-    end
-    if #alsoNames > 0 then
-        text = string.format("%s |cff808080(+ %s)|r", text, table.concat(alsoNames, ", "))
+    if #also > 0 then
+        local names = {}
+        for _, optionData in ipairs(also) do
+            table.insert(names, optionData.name)
+        end
+        text = string.format("%s |cff808080(+ %s)|r", text, table.concat(names, ", "))
     end
 
     if result.intensity and result.intensity > 0 then
@@ -69,7 +90,14 @@ function Diagnostics:FormatTriggerValue(entry)
         text = text .. " |cff808080*|r"
     end
 
-    return text
+    return text, true
+end
+
+-- Sets a FontString to a formatted value, greyed when it is only a placeholder.
+function Diagnostics:SetValueText(fontString, result, detail)
+    local text, isValue = self:FormatValue(result, detail)
+    fontString:SetText(text)
+    fontString:SetTextColor((isValue and HIGHLIGHT_FONT_COLOR or GRAY_FONT_COLOR):GetRGB())
 end
 
 -- outfitID is an identity, not a position: the list also carries playerFacingOutfitIndex,
@@ -147,7 +175,7 @@ function Diagnostics:PrintEnvironmentSnapshot()
 
     local anyUnverified = false
     for _, entry in ipairs(snapshot.triggers) do
-        ns.Print(string.format("%s: %s", entry.categoryName, self:FormatTriggerValue(entry)))
+        ns.Print(string.format("%s: %s", entry.categoryName, self:FormatValue(entry.result, "full")))
         if entry.result.state == ns.Triggers.STATE_OK and entry.result.unverified then
             anyUnverified = true
         end

@@ -69,14 +69,43 @@ for _, event in ipairs({ "VIEWED_TRANSMOG_OUTFIT_CHANGED", "VIEWED_TRANSMOG_OUTF
     H.Check(event .. " refetches", ns.Triggers:GetCategories() == H.categories, true)
 end
 
--- The Situations tab must register the category events even when the category they concern
--- does not exist yet, or creating a first set while the tab is open would go unnoticed.
-H.Section("panel event registration")
-ns.SituationPanel.eventFrame = H.NewFrame()
-ns.SituationPanel.situationsFrame = { SituationFramePool = { EnumerateActive = function() return function() end end } }
-ns.SituationPanel:StartTracking()
-for _, event in ipairs(ns.Triggers.CATEGORY_EVENTS) do
-    H.Check("registers " .. event, ns.SituationPanel.eventFrame.registered[event] == true, true)
+-- Triggers is the only listener. It handles an event before any subscriber hears of it, so a
+-- subscriber reading the model inside its callback already sees the new category tree -- the
+-- ordering four separate event frames only got right by accident of creation order.
+H.Section("the event hub")
+local seenCategories, seenEvent
+local function Subscriber(event)
+    seenEvent = event
+    seenCategories = #ns.Triggers:GetCategories()
 end
+ns.Triggers:Subscribe(Subscriber)
+H.categories = { LOCATIONS }
+H.sets = {}
+H.Fire("EQUIPMENT_SETS_CHANGED")
+H.Check("subscriber is told", seenEvent, "EQUIPMENT_SETS_CHANGED")
+H.Check("...after the category cache was dropped", seenCategories, 1)
+H.Fire("ZONE_CHANGED")
+H.Check("resolver events reach subscribers too", seenEvent, "ZONE_CHANGED")
+ns.Triggers:Unsubscribe(Subscriber)
+seenEvent = nil
+H.Fire("ZONE_CHANGED")
+H.Check("an unsubscribed callback hears nothing", seenEvent, nil)
+
+-- One poll for the whole addon, only while a subscriber that wants it is listening and a
+-- category with no usable event exists (Movement, Time of Day).
+H.Section("polling")
+local polls = 0
+local function Poller(event)
+    if event == "POLL" then polls = polls + 1 end
+end
+ns.Triggers:Subscribe(Poller, true)
+H.Check("no polled category, no ticker", H.LiveTickers(), 0)
+H.categories = { LOCATIONS, H.Movement() }
+H.Fire("PLAYER_ENTERING_WORLD")
+H.Check("a polled category starts it", H.LiveTickers(), 1)
+H.RunTickers(3)
+H.Check("the poll reaches the subscriber", polls, 3)
+ns.Triggers:Unsubscribe(Poller)
+H.Check("the last poller leaving stops it", H.LiveTickers(), 0)
 
 H.Done()

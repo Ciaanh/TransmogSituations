@@ -8,7 +8,6 @@ local StatusPanel = {}
 ns.StatusPanel = StatusPanel
 
 local PANEL_NAME = "BetterSituationStatusPanel"
-local POLL_INTERVAL = 1.5
 local WIDTH, ROW_HEIGHT, PADDING, HEADER = 260, 16, 12, 28
 
 local function EnsureSaved()
@@ -181,28 +180,7 @@ function StatusPanel:Refresh()
         row.label:SetText(entry.categoryName)
         row.label:Show()
 
-        local result = entry.result
-        local text, r, g, b
-
-        if result.state == ns.Triggers.STATE_OK and result.optionName then
-            text = result.optionName
-            if result.alsoOptions and #result.alsoOptions > 0 then
-                text = string.format("%s +%d", text, #result.alsoOptions)
-            end
-            if result.approximate or result.ambiguous then
-                text = text .. " ~"
-            end
-            r, g, b = HIGHLIGHT_FONT_COLOR:GetRGB()
-        elseif result.state == ns.Triggers.STATE_UNSUPPORTED then
-            text = "n/a"
-            r, g, b = GRAY_FONT_COLOR:GetRGB()
-        else
-            text = "?"
-            r, g, b = GRAY_FONT_COLOR:GetRGB()
-        end
-
-        row.value:SetText(text)
-        row.value:SetTextColor(r, g, b)
+        ns.Diagnostics:SetValueText(row.value, entry.result, "compact")
         row.value:Show()
         count = index
     end
@@ -222,40 +200,15 @@ function StatusPanel:Refresh()
     self.frame:SetHeight(HEADER + math.max(count, 1) * ROW_HEIGHT + PADDING)
 end
 
+-- Live while shown: every change Triggers hears of, plus its poll for the values that have no
+-- event (mount, swim and fly state, the clock).
 function StatusPanel:StartTracking()
-    if not self.eventFrame then
-        self.eventFrame = CreateFrame("Frame")
-        self.eventFrame:SetScript("OnEvent", function() self:Refresh() end)
-    end
-
-    local events = ns.Triggers:GetAllEvents()
-    local seen = {}
-    for _, event in ipairs(events) do
-        seen[event] = true
-    end
-    for _, event in ipairs(ns.Triggers.CATEGORY_EVENTS) do
-        if not seen[event] then
-            table.insert(events, event)
-        end
-    end
-    ns.Util.RegisterEventsSafely(self.eventFrame, events)
-
-    if ns.Triggers:NeedsPolling() and not self.ticker then
-        self.ticker = C_Timer.NewTicker(POLL_INTERVAL, function() self:Refresh() end)
-    end
-
+    ns.Triggers:Subscribe(self.onChange, true)
     self:Refresh()
 end
 
 function StatusPanel:StopTracking()
-    if self.ticker then
-        self.ticker:Cancel()
-        self.ticker = nil
-    end
-
-    if self.eventFrame then
-        self.eventFrame:UnregisterAllEvents()
-    end
+    ns.Triggers:Unsubscribe(self.onChange)
 end
 
 function StatusPanel:SaveShown(shown)
@@ -284,6 +237,10 @@ function StatusPanel:Toggle()
 end
 
 function StatusPanel:Init()
+    self.onChange = function()
+        self:Refresh()
+    end
+
 
     local saved = EnsureSaved()
     if saved and saved.shown then

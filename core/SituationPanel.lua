@@ -11,8 +11,6 @@ local _, ns = ...
 local SituationPanel = {}
 ns.SituationPanel = SituationPanel
 
-local POLL_INTERVAL = 1.5
-
 local function IsBlizzardTransmogLoaded()
     if C_AddOns and C_AddOns.IsAddOnLoaded then
         return C_AddOns.IsAddOnLoaded("Blizzard_Transmog")
@@ -64,25 +62,14 @@ function SituationPanel:RefreshRows()
         if triggerID then
             local value = AcquireValueText(situationFrame)
             if value then
-                local result = ns.Triggers:Resolve(triggerID)
-                local displayName = result.optionName
-
-                if result.state == ns.Triggers.STATE_OK and displayName then
-                    value:SetText(displayName)
-                    value:SetTextColor(HIGHLIGHT_FONT_COLOR:GetRGB())
-                elseif result.state == ns.Triggers.STATE_UNSUPPORTED then
-                    -- Rendering nothing here would be indistinguishable from a broken row.
-                    value:SetText("n/a")
-                    value:SetTextColor(GRAY_FONT_COLOR:GetRGB())
-                else
-                    value:SetText("?")
-                    value:SetTextColor(GRAY_FONT_COLOR:GetRGB())
-                end
+                ns.Diagnostics:SetValueText(value, ns.Triggers:Resolve(triggerID), "value")
             end
         end
     end
 end
 
+-- Live while the tab is visible: every change Triggers hears of, plus its poll for the values
+-- that have no event (mount, swim and fly state, the clock).
 function SituationPanel:StartTracking()
     if self.tracking then
         return
@@ -97,46 +84,12 @@ function SituationPanel:StartTracking()
     ns.OutfitCache:RecordViewed()
 
     self:RefreshRows()
-
-    -- GetAllEvents only covers the categories that exist right now, so on its own it would
-    -- miss the event that makes a new category appear -- saving a first equipment set while
-    -- the tab is open. Always take the category events too.
-    local events = ns.Triggers:GetAllEvents()
-    local seen = {}
-    for _, event in ipairs(events) do
-        seen[event] = true
-    end
-    for _, event in ipairs(ns.Triggers.CATEGORY_EVENTS) do
-        if not seen[event] then
-            table.insert(events, event)
-        end
-    end
-
-    ns.Util.RegisterEventsSafely(self.eventFrame, events)
-
-    -- Mount/swim/fly state and the clock have no usable event, so those (and only those)
-    -- need a poll, and only while the tab is actually visible.
-    if ns.Triggers:NeedsPolling() and not self.ticker then
-        self.ticker = C_Timer.NewTicker(
-            POLL_INTERVAL,
-            function()
-                self:RefreshRows()
-            end
-        )
-    end
+    ns.Triggers:Subscribe(self.onChange, true)
 end
 
 function SituationPanel:StopTracking()
     self.tracking = false
-
-    if self.ticker then
-        self.ticker:Cancel()
-        self.ticker = nil
-    end
-
-    if self.eventFrame then
-        self.eventFrame:UnregisterAllEvents()
-    end
+    ns.Triggers:Unsubscribe(self.onChange)
 end
 
 function SituationPanel:AttachToSituationsFrame()
@@ -157,14 +110,6 @@ function SituationPanel:AttachToSituationsFrame()
     end
 
     self.situationsFrame = situationsFrame
-
-    self.eventFrame = CreateFrame("Frame")
-    self.eventFrame:SetScript(
-        "OnEvent",
-        function()
-            self:RefreshRows()
-        end
-    )
 
     -- The XML mixin= attribute copies the mixin's functions onto the frame at creation, so
     -- hooking TransmogWardrobeSituationsMixin here would do nothing. Hook the instance.
@@ -242,6 +187,10 @@ function SituationPanel:TryAttach()
 end
 
 function SituationPanel:Init()
+    self.onChange = function()
+        self:RefreshRows()
+    end
+
 
     if not ns.Capabilities.hasSituations then
         return

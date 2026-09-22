@@ -199,11 +199,25 @@ function H.NewFrame()
     function f:IsShown() return self.shown end
     function f:IsVisible() return self.shown end
     function f:GetPoint() return "CENTER", nil, "CENTER", 0, 0 end
-    function f:CreateFontString() return Chain() end
+    function f:CreateFontString()
+        -- Keeps its text and colour, so a test can read what a panel rendered.
+        local fs = Chain()
+        rawset(fs, "SetText", function(self, text) rawset(self, "text", text) end)
+        rawset(fs, "GetText", function(self) return rawget(self, "text") end)
+        rawset(fs, "SetTextColor", function(self, r, g, b) rawset(self, "color", { r, g, b }) end)
+        rawset(fs, "GetWidth", function() return 170 end)
+        return fs
+    end
     function f:CreateTexture() return Chain() end
 
-    -- Anything else (SetSize, SetPoint, SetMovable, ...) is accepted and ignored.
-    setmetatable(f, { __index = function() return function() return f end end })
+    -- Layout and dragging calls are accepted and ignored. Only these: a catch-all would make
+    -- every missing field look present, and the addon checks fields (a cached FontString, an
+    -- optional SetBackdrop) the way it would on a real frame.
+    for _, method in ipairs({ "SetSize", "SetWidth", "SetHeight", "SetPoint", "ClearAllPoints",
+        "SetAllPoints", "SetFrameStrata", "SetClampedToScreen", "SetMovable", "EnableMouse",
+        "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetParent" }) do
+        f[method] = function() return f end
+    end
     table.insert(H.frames, f)
     return f
 end

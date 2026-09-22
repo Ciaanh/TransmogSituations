@@ -112,11 +112,8 @@ function OutfitCache:RecordViewed()
         return nil
     end
 
-    -- The cached tree is a snapshot of one outfit's flags. Drop it here rather than trusting
-    -- that the Triggers watcher's handler ran before ours -- that only held by frame
-    -- creation order, which is nothing to build on.
-    ns.Triggers:InvalidateCategories()
-
+    -- The category tree is current: Triggers drops it on the viewed-outfit events before any
+    -- subscriber, this one included, hears of them.
     local categories = ns.Triggers:GetCategories()
     if #categories == 0 then
         return nil
@@ -418,29 +415,19 @@ function OutfitCache:Init()
 
     -- Record whenever the viewed outfit or its assignments change. RecordViewed itself skips
     -- the calls made mid-edit, so the commit (or the next view) is what gets written down.
-    local watcher = CreateFrame("Frame")
-    watcher:SetScript(
-        "OnEvent",
-        function(_, event)
-            -- The outfit list itself changed (created, deleted, renamed): the one moment to
-            -- forget outfits that are gone.
+    -- TRANSMOG_OUTFITS_CHANGED fires when the outfit list is rebuilt, which is how the list label
+    -- picks up a committed edit: cheap insurance for the commit path below, and the one moment
+    -- to forget outfits that are gone.
+    ns.Triggers:Subscribe(
+        function(event)
             if event == "TRANSMOG_OUTFITS_CHANGED" then
                 self:Prune()
+                self:RecordViewed()
+            elseif event == "VIEWED_TRANSMOG_OUTFIT_CHANGED" or event == "VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED" then
+                self:RecordViewed()
             end
-            self:RecordViewed()
         end
     )
-    ns.Util.RegisterEventsSafely(
-        watcher,
-        {
-            "VIEWED_TRANSMOG_OUTFIT_CHANGED",
-            "VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED",
-            -- Fired when the outfit list is rebuilt, which is how the list label picks up a
-            -- committed edit: cheap insurance for the commit path below, and when to prune.
-            "TRANSMOG_OUTFITS_CHANGED"
-        }
-    )
-    self.watcher = watcher
 
     -- The Situations tab's Apply button calls CommitPendingSituations and nothing else
     -- (Blizzard_Transmog.lua, TransmogWardrobeSituationsMixin:OnLoad, both clients). Every

@@ -91,6 +91,14 @@ wraps each in `{ triggerID, categoryName, result }`. Options are looked up with 
 eligibility matcher are four renderers over one model. A new consumer reads `ResolveAll()` or
 `Resolve(triggerID)`; it never re-derives a value.
 
+**Triggers is also the only event listener.** It registers every event any resolver or consumer
+needs, handles each one first (drops the category cache, remembers an applied equipment set),
+then calls its subscribers in order. A module that needs to react calls
+`Triggers:Subscribe(fn, wantsPolling)` and gets `fn(event, ...)`, plus `fn("POLL")` from the
+single shared ticker while it asked for polling and a polled category exists. Never create
+another event frame for game events; subscribe. (The bootstrap's `ADDON_LOADED` frame and
+`SituationPanel`'s attach loader are the two exceptions: they run before or outside the model.)
+
 ## Build / test / release
 
 ```powershell
@@ -234,10 +242,12 @@ eligible entry is a display count only.
 - **Never taint.** Attach with `HookScript` / `hooksecurefunc` on the frame *instance* (the XML
   `mixin=` attribute copies functions at creation, so hooking the mixin table does nothing) and
   parent child regions to Blizzard's frames; never replace or reorder `SituationFramePool` entries.
-- Live values with no backing event (mount / swim / time) are polled — both panels run a
-  `C_Timer.NewTicker` only while shown, and only if `Triggers:NeedsPolling()`.
-- **Formatting lives in `Diagnostics`.** The inline row on the Situations tab shows only the value
-  (no reason, no markers, no tooltip) — a decision, not an oversight. `/bs` is where detail lives.
+- Live values with no backing event (mount / swim / time) are polled — one ticker in `Triggers`,
+  running only while a panel that asked for it is shown, and only if `Triggers:NeedsPolling()`.
+- **Formatting lives in `Diagnostics`.** `Diagnostics:FormatValue(result, detail)` is the only
+  rendering of a value: `"value"` for the tab row, `"compact"` for the panel (`+N`, `~`), `"full"`
+  for chat. The inline row on the Situations tab shows only the value (no reason, no markers, no
+  tooltip) — a decision, not an oversight. `/bs` is where detail lives.
 - **Forever beta does not reliably persist SavedVariables** across `/reload` or logout (known
   client bug). On Forever, anything stored — the outfit cache, `lastAppliedSet`, panel state — may
   be gone next session; `/bs scan` rebuilds the cache. Verify persistence on Retail, and never read
