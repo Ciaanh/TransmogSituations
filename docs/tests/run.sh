@@ -27,30 +27,9 @@ run() {
     fi
 }
 
-echo "-- replays of real captures --"
-run "retail"  docs/tests/replay_retail.lua .
-run "retail, loadouts + outfit viewed" docs/tests/replay_retail_loadouts.lua .
-run "forever" docs/tests/replay_forever.lua .
-run "forever, outfit viewed" docs/tests/replay_forever_viewed.lua .
-
-echo "-- resolver branches --"
-run "all branches" docs/tests/resolvers.lua .
-
-echo "-- category cache --"
-run "invalidation" docs/tests/cache_invalidation.lua .
-
-echo "-- attach lifecycle --"
-run "retry until the frame exists" docs/tests/attach_retry.lua .
-
-echo "-- /bs list marking --"
-run "current + also active" docs/tests/list_marking.lua .
-
-echo "-- phase 4: cache + eligibility --"
-run "match, rank, verify" docs/tests/eligibility.lua .
-
-echo "-- equipment sets --"
-for s in equipped distinct allequipped tiebreak specassigned swappedring partial idmismatch; do
-    run "$s" docs/tests/equipment_sets.lua . "$s"
+echo "-- tests --"
+for t in replay_retail replay_retail_loadouts replay_forever replay_forever_viewed          resolvers equipment_sets cache_invalidation attach_retry list_marking eligibility; do
+    run "$t" "docs/tests/$t.lua" .
 done
 
 echo

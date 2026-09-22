@@ -1,143 +1,64 @@
--- Exercises the Equipment Sets trigger, which no real capture has covered yet.
--- Three scenarios: a fully equipped set, a partially equipped one, and an id mismatch
--- between C_EquipmentSet and the situation option.
-local ROOT = arg[1] or "."
+---@diagnostic disable: undefined-global, lowercase-global
+-- The Equipment Sets resolver, one scenario per way the client can report sets. There is no
+-- "currently selected set" api: isEquipped means every non-ignored slot is worn, several sets
+-- can report it at once, and the tie has to be broken deliberately.
+local H = dofile((arg[1] or ".") .. "/docs/tests/harness.lua")
 
-local SCENARIO = arg[2] or "equipped"
+-- Verbatim from the Retail dump: ids start at 0, and the All row also carries 0.
+H.categories = { H.Category(6, "Equipment Sets", { H.Opt("All Equipment Sets", 18),
+    H.Opt("plop 1", 19, { equipmentSetID = 0 }), H.Opt("prout", 19, { equipmentSetID = 1 }),
+    H.Opt("haha", 19, { equipmentSetID = 2 }) }) }
+H.W.specIndex, H.W.specID = 1, 259
 
-Enum = { TransmogSituation = {} }
-
-local function Opt(name, situationID, equipmentSetID)
-    return {
-        name = name,
-        value = false,
-        option = { situationID = situationID, specID = 0, loadoutID = 0, equipmentSetID = equipmentSetID or 0 },
-    }
+local function Set(id, name, isEquipped, numItems, numEquipped)
+    return { id = id, name = name, isEquipped = isEquipped, numItems = numItems, numEquipped = numEquipped }
 end
 
--- Presumed ids 18/19 for the equipment-set pair; the option's own equipmentSetID is what
--- actually matters, so the situationID here is only along for the ride.
-local CATEGORIES = {
-    { triggerID = 6, name = "Equipment Sets", isRadioButton = false, groupData = { { optionData = {
-        -- Verbatim from the Retail dump: ids start at 0, and the All row also carries 0.
-        Opt("All Equipment Sets", 18), Opt("plop 1", 19, 0), Opt("prout", 19, 1),
-        Opt("haha", 19, 2) } } } },
-}
-
-C_TransmogOutfitInfo = {
-    GetUISituationCategoriesAndOptions = function() return CATEGORIES end,
-    GetActiveOutfitID = function() return 1 end,
-    GetOutfitSituationsEnabled = function() return true end,
-}
-
-local SETS = {
-    -- Set id 0 is the case the old `value ~= 0` guard silently dropped.
-    equipped     = { { id = 0, name = "plop 1", isEquipped = true,  numItems = 16, numEquipped = 16 },
-                     { id = 1, name = "prout",  isEquipped = false, numItems = 16, numEquipped = 2 } },
-    -- All three report isEquipped, exactly as the real dump did.
-    allequipped  = { { id = 0, name = "plop 1", isEquipped = true, numItems = 16, numEquipped = 16 },
-                     { id = 1, name = "prout",  isEquipped = true, numItems = 16, numEquipped = 16 },
-                     { id = 2, name = "haha",   isEquipped = true, numItems = 16, numEquipped = 16 } },
-    -- Verbatim from the second Retail dump, after the sets were made distinct:
-    -- only "plop 1" is fully equipped, the others are one item short.
-    distinct     = { { id = 0, name = "plop 1", isEquipped = true,  numItems = 15, numEquipped = 15 },
-                     { id = 1, name = "prout",  isEquipped = false, numItems = 15, numEquipped = 14 },
-                     { id = 2, name = "haha",   isEquipped = false, numItems = 15, numEquipped = 14 } },
-    partial      = { { id = 0, name = "plop 1", isEquipped = false, numItems = 16, numEquipped = 15 },
-                     { id = 1, name = "prout",  isEquipped = false, numItems = 16, numEquipped = 1 } },
-    idmismatch   = { { id = 77, name = "Healing", isEquipped = true, numItems = 16, numEquipped = 16 } },
-    -- Applied "Healing", then swapped one ring: isEquipped goes false but the player is
-    -- still wearing the set in any meaningful sense.
-    swappedring  = { { id = 0, name = "plop 1", isEquipped = false, numItems = 16, numEquipped = 15 },
-                     { id = 1, name = "prout",  isEquipped = false, numItems = 16, numEquipped = 1 } },
-    -- Three match, but the player applied "haha": that one should win the tie.
-    specassigned = { { id = 0, name = "plop 1", isEquipped = true, numItems = 16, numEquipped = 16 },
-                     { id = 1, name = "prout",  isEquipped = true, numItems = 16, numEquipped = 16 },
-                     { id = 2, name = "haha",   isEquipped = true, numItems = 16, numEquipped = 16 } },
-    tiebreak     = { { id = 0, name = "plop 1", isEquipped = true, numItems = 16, numEquipped = 16 },
-                     { id = 1, name = "prout",  isEquipped = true, numItems = 16, numEquipped = 16 },
-                     { id = 2, name = "haha",   isEquipped = true, numItems = 16, numEquipped = 16 } },
-}
-local ACTIVE = SETS[SCENARIO]
-
-SPEC_ASSIGNED = nil -- equipmentSetID assigned to the current spec, if any
-
-C_EquipmentSet = {
-    GetEquipmentSetForSpec = function() return SPEC_ASSIGNED end,
-    GetEquipmentSetAssignedSpec = function(id) return (id == SPEC_ASSIGNED) and 1 or nil end,
-    GetEquipmentSetIDs = function()
-        local ids = {}
-        for _, s in ipairs(ACTIVE) do table.insert(ids, s.id) end
-        return ids
-    end,
-    GetEquipmentSetInfo = function(id)
-        for _, s in ipairs(ACTIVE) do
-            if s.id == id then
-                return s.name, 123, s.id, s.isEquipped, s.numItems, s.numEquipped, 0, 0, 0
-            end
-        end
-    end,
-}
-
-C_DelvesUI = { HasActiveDelve = function() return false end }
-C_PlayerInfo = { GetAlternateFormInfo = function() return false, false end }
-C_SpecializationInfo = {
-    GetSpecialization = function() return 1 end,
-    GetSpecializationInfo = function() return 259, "Assassination" end,
-}
-C_AddOns = { IsAddOnLoaded = function() return false end }
-C_Timer = { NewTicker = function() return { Cancel = function() end } end }
-
-function IsInInstance() return false, "none" end
-function IsResting() return false end
-function IsIndoors() return false end
-function IsSwimming() return false end
-function IsMounted() return false end
-function IsFlying() return false end
-function GetGameTime() return 10, 0 end
-function GetRealZoneText() return "Orgrimmar" end
-function GetSubZoneText() return "" end
-function hooksecurefunc() end
-date = os.date
-
-HIGHLIGHT_FONT_COLOR = { GetRGB = function() return 1, 1, 1 end }
-GRAY_FONT_COLOR = { GetRGB = function() return 0.5, 0.5, 0.5 end }
-SlashCmdList = {}
-local output = {}
-DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) table.insert(output, msg) end }
-local function StubFrame()
-    local f = {}
-    setmetatable(f, { __index = function() return function() return f end end })
-    return f
-end
-function CreateFrame() return StubFrame() end
-
-local ns = {}
-for _, file in ipairs({ "core/Util.lua", "core/Capabilities.lua", "core/Triggers.lua", "core/OutfitCache.lua",
-    "core/Diagnostics.lua", "core/SituationPanel.lua", "BetterSituation.lua" }) do
-    local chunk = assert(loadfile(ROOT .. "/" .. file))
-    assert(pcall(chunk, "BetterSituation", ns))
+local function ThreeWorn()
+    return { Set(0, "plop 1", true, 16, 16), Set(1, "prout", true, 16, 16), Set(2, "haha", true, 16, 16) }
 end
 
-local api = ns.BetterSituation
-ns.Capabilities:Init()
-ns.Triggers:Init(api)
-ns.Diagnostics:Init(api)
+local SCENARIOS = {
+    -- Set id 0 is the case an old "value ~= 0" guard silently dropped.
+    { "equipped", { Set(0, "plop 1", true, 16, 16), Set(1, "prout", false, 16, 2) }, { name = "plop 1" } },
+    -- Verbatim from the second Retail dump: only "plop 1" is fully worn.
+    { "distinct", { Set(0, "plop 1", true, 15, 15), Set(1, "prout", false, 15, 14), Set(2, "haha", false, 15, 14) },
+        { name = "plop 1" } },
+    -- All three report isEquipped, exactly as the first dump did. Nothing breaks the tie.
+    { "allequipped", ThreeWorn(), { name = "plop 1", ambiguous = 3 } },
+    -- Same tie, but the player applied "haha": what they applied wins.
+    { "tiebreak", ThreeWorn(), { name = "haha" }, applied = 2 },
+    -- Same tie, nothing applied, but "prout" is assigned to this spec.
+    { "specassigned", ThreeWorn(), { name = "prout", specAssigned = true }, specSet = 1 },
+    -- Applied "plop 1", then swapped one ring: still worn in any meaningful sense.
+    { "swappedring", { Set(0, "plop 1", false, 16, 15), Set(1, "prout", false, 16, 1) },
+        { name = "plop 1", approximate = true }, applied = 0 },
+    -- Nothing worn, nothing applied: unknown, not a guess.
+    { "partial", { Set(0, "plop 1", false, 16, 15), Set(1, "prout", false, 16, 1) }, { state = "unknown" } },
+    -- A worn set with no option carrying its id must not borrow a neighbour's.
+    { "idmismatch", { Set(77, "Healing", true, 16, 16) }, { state = "unknown" } },
+}
 
-if SCENARIO == "swappedring" then
-    ns.Triggers:RememberAppliedSet(0) -- as EQUIPMENT_SWAP_FINISHED would have
-elseif SCENARIO == "tiebreak" then
-    ns.Triggers:RememberAppliedSet(2)
-elseif SCENARIO == "specassigned" then
-    -- Three match, nothing applied this session, but "prout" is assigned to this spec.
-    SPEC_ASSIGNED = 1
+local ns = H.Load()
+
+for _, scenario in ipairs(SCENARIOS) do
+    local label, sets, want = scenario[1], scenario[2], scenario[3]
+    H.sets = sets
+    H.specAssignedSet = scenario.specSet
+    ns.Triggers.lastAppliedSetID = nil
+    ns.BetterSituation.db.lastAppliedSet = nil
+    if scenario.applied then
+        ns.Triggers:RememberAppliedSet(scenario.applied) -- as EQUIPMENT_SWAP_FINISHED would
+    end
+    ns.Triggers:InvalidateCategories()
+
+    local result = ns.Triggers:Resolve(6)
+    H.Section(label)
+    H.Check("state", result.state, want.state or "ok")
+    H.Check("value", result.optionName, want.name)
+    H.Check("ambiguous", result.ambiguous, want.ambiguous)
+    H.Check("specAssigned", result.specAssigned, want.specAssigned)
+    H.Check("approximate", result.approximate, want.approximate)
 end
 
-local entry = ns.Triggers:ResolveAll()[1]
-print(string.format("scenario=%-12s state=%-8s name=%-7s ambiguous=%-5s specAssigned=%-5s reason=%s",
-    SCENARIO, entry.result.state, tostring(entry.displayName),
-    tostring(entry.result.ambiguous), tostring(entry.result.specAssigned),
-    tostring(entry.result.reason)))
-output = {}
-ns.Diagnostics:PrintEnvironmentSnapshot()
-print("   chat: " .. output[1])
+H.Done()

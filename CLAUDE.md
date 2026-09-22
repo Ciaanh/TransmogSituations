@@ -94,9 +94,10 @@ eligibility matcher are four renderers over one model. A new consumer reads `Res
 ./docs/tests/run.sh           # Lua 5.1 replay suite; LUA= / LUAC= override the interpreter path
 ```
 
-Run the suite after any change to `core/Triggers.lua`, `core/OutfitCache.lua` or
-`core/Eligibility.lua`. It replays two real `/bs dump` captures and drives every resolver branch
-under stubs. It proves the mapping behaves as designed given an input; it cannot prove the game
+Run the suite after any change under `core/`. It loads the addon through the toc and the real
+`ADDON_LOADED` bootstrap against the stubs in `docs/tests/harness.lua`, replays four real
+`/bs dump` captures and drives every resolver branch. A new Blizzard api call needs its stub added
+to the harness, once. See `docs/tests/README.md`. It proves the mapping behaves as designed given an input; it cannot prove the game
 supplies that input, and it cannot prove the matching rules are Blizzard's. Three
 confidently-wrong mappings have shipped in this project and each was caught only by a real
 `/bs dump` in game.
