@@ -23,6 +23,6 @@ end
 -- Retail, so anything position-based would silently return the wrong option.
 H.Section("identity is the situationID, not the position")
 H.Check("Locations position 5 on this client", ns.Triggers:GetOptions(3)[5].name, "Dungeons")
-H.Check("House (7) is not offered here", ns.Triggers:FindOptionBySituation(3, ns.Triggers.SITUATION.LocationHouse), nil)
+H.Check("House (7) is not offered here", ns.Triggers:FindOption(3, ns.Triggers.SITUATION.LocationHouse), nil)
 
 H.Done()

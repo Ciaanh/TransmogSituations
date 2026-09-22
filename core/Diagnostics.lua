@@ -29,11 +29,15 @@ function Diagnostics:FormatTriggerValue(entry)
         return UNKNOWN_TEXT
     end
 
-    local text = entry.displayName or UNKNOWN_TEXT
+    local text = result.optionName or UNKNOWN_TEXT
 
-    -- Locations is multi-valued: a neighborhood is also a rest area.
-    if entry.alsoNames and #entry.alsoNames > 0 then
-        text = string.format("%s |cff808080(+ %s)|r", text, table.concat(entry.alsoNames, ", "))
+    -- Multi-valued categories: a house is also a rest area, a loadout is also its spec.
+    local alsoNames = {}
+    for _, optionData in ipairs(result.alsoOptions or {}) do
+        table.insert(alsoNames, optionData.name)
+    end
+    if #alsoNames > 0 then
+        text = string.format("%s |cff808080(+ %s)|r", text, table.concat(alsoNames, ", "))
     end
 
     if result.intensity and result.intensity > 0 then
@@ -74,15 +78,8 @@ end
 function Diagnostics:GetOutfitsByID()
     local byID = {}
 
-    if not ns.Capabilities.hasSituations then
-        return byID
-    end
-
-    local ok, outfits = SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
-    if ok and type(outfits) == "table" then
-        for _, info in ipairs(outfits) do
-            byID[info.outfitID] = info
-        end
+    for _, info in ipairs(ns.OutfitCache:GetOutfits()) do
+        byID[info.outfitID] = info
     end
 
     return byID
@@ -144,13 +141,13 @@ function Diagnostics:PrintEnvironmentSnapshot()
     local snapshot = self:CollectSnapshot()
 
     if #snapshot.triggers == 0 then
-        self.api:Print("No situation categories available on this client.")
+        ns.Print("No situation categories available on this client.")
         return
     end
 
     local anyUnverified = false
     for _, entry in ipairs(snapshot.triggers) do
-        self.api:Print(string.format("%s: %s", entry.categoryName, self:FormatTriggerValue(entry)))
+        ns.Print(string.format("%s: %s", entry.categoryName, self:FormatTriggerValue(entry)))
         if entry.result.state == ns.Triggers.STATE_OK and entry.result.unverified then
             anyUnverified = true
         end
@@ -160,10 +157,10 @@ function Diagnostics:PrintEnvironmentSnapshot()
     if snapshot.subZone ~= "" then
         zone = string.format("%s - %s", zone, snapshot.subZone)
     end
-    self.api:Print("Zone: " .. zone)
+    ns.Print("Zone: " .. zone)
 
     if snapshot.situationsEnabled ~= nil then
-        self.api:Print(
+        ns.Print(
             string.format(
                 "Situations: %s | Active outfit: %s",
                 snapshot.situationsEnabled and "enabled" or "disabled",
@@ -173,7 +170,7 @@ function Diagnostics:PrintEnvironmentSnapshot()
 
         -- Distinct from the active outfit, and it is the one the list highlights.
         if snapshot.viewedOutfitID ~= snapshot.activeOutfitID then
-            self.api:Print(
+            ns.Print(
                 "Viewed outfit (highlighted in the list): " ..
                     self:DescribeOutfit(snapshot.viewedOutfitID, snapshot.outfitsByID)
             )
@@ -181,7 +178,7 @@ function Diagnostics:PrintEnvironmentSnapshot()
     end
 
     if anyUnverified then
-        self.api:Print("|cff808080* value derived from an unverified heuristic|r")
+        ns.Print("|cff808080* value derived from an unverified heuristic|r")
     end
 end
 
@@ -191,13 +188,13 @@ function Diagnostics:PrintCategoriesList()
     local categories = ns.Triggers:GetCategories()
 
     if #categories == 0 then
-        self.api:Print("No situation categories available on this client.")
+        ns.Print("No situation categories available on this client.")
         return
     end
 
     for _, category in ipairs(categories) do
         local result = ns.Triggers:Resolve(category.triggerID)
-        self.api:Print(string.format("|cffffd100[%d] %s|r", category.triggerID, category.name))
+        ns.Print(string.format("|cffffd100[%d] %s|r", category.triggerID, category.name))
 
         -- Compare against the option the resolver actually picked rather than re-deriving
         -- the match here; a second copy of that logic is a copy that drifts.
@@ -217,7 +214,7 @@ function Diagnostics:PrintCategoriesList()
                 marks = marks .. " |cff0099cc[also active]|r"
             end
 
-            self.api:Print(string.format("   %s%s", optionData.name, marks))
+            ns.Print(string.format("   %s%s", optionData.name, marks))
         end
     end
 end
@@ -227,8 +224,8 @@ end
 -- plus the raw player-state calls the resolvers are built on.
 function Diagnostics:PrintRawDump()
     local caps = ns.Capabilities
-    self.api:Print("|cffffd100-- capabilities --|r")
-    self.api:Print(
+    ns.Print("|cffffd100-- capabilities --|r")
+    ns.Print(
         string.format(
             "situations=%s weather=%s(C_Weather=%s Enum.WeatherType=%s) equipmentSets=%s delves=%s housing=%s",
             tostring(caps.hasSituations),
@@ -241,9 +238,9 @@ function Diagnostics:PrintRawDump()
         )
     )
 
-    self.api:Print("|cffffd100-- raw player state --|r")
+    ns.Print("|cffffd100-- raw player state --|r")
     local inInstance, instanceType = IsInInstance()
-    self.api:Print(
+    ns.Print(
         string.format(
             "IsInInstance=%s/%s IsResting=%s IsIndoors=%s",
             tostring(inInstance),
@@ -252,7 +249,7 @@ function Diagnostics:PrintRawDump()
             tostring(IsIndoors())
         )
     )
-    self.api:Print(
+    ns.Print(
         string.format(
             "IsSwimming=%s IsMounted=%s IsFlying=%s",
             tostring(IsSwimming("player")),
@@ -265,7 +262,7 @@ function Diagnostics:PrintRawDump()
         local _okHouse, insideHouse = SafeCall(C_Housing.IsInsideHouse)
         local _okPlot, insidePlot = SafeCall(C_Housing.IsInsideHouseOrPlot)
         local _okMap, onMap = SafeCall(C_Housing.IsOnNeighborhoodMap)
-        self.api:Print(
+        ns.Print(
             string.format(
                 "Housing IsInsideHouse=%s IsInsideHouseOrPlot=%s IsOnNeighborhoodMap=%s",
                 tostring(insideHouse),
@@ -280,7 +277,7 @@ function Diagnostics:PrintRawDump()
         hasAlt, inAlt = C_PlayerInfo.GetAlternateFormInfo()
     end
     local hour, minute = GetGameTime()
-    self.api:Print(
+    ns.Print(
         string.format(
             "AlternateForm has=%s in=%s | GetGameTime=%s:%s",
             tostring(hasAlt),
@@ -292,7 +289,7 @@ function Diagnostics:PrintRawDump()
 
     if caps.hasWeather then
         local okWeather, weather = SafeCall(C_Weather.GetCurrentWeather)
-        self.api:Print(
+        ns.Print(
             string.format(
                 "Weather ok=%s type=%s intensity=%s",
                 tostring(okWeather),
@@ -305,7 +302,7 @@ function Diagnostics:PrintRawDump()
     if caps.hasEquipmentSets then
         local _ok, setIDs = SafeCall(C_EquipmentSet.GetEquipmentSetIDs)
         if type(setIDs) == "table" then
-            self.api:Print(
+            ns.Print(
                 string.format(
                     "|cffffd100-- equipment sets (%d), lastApplied=%s specAssigned=%s --|r",
                     #setIDs,
@@ -316,7 +313,7 @@ function Diagnostics:PrintRawDump()
             for _, setID in ipairs(setIDs) do
                 local okInfo, name, _icon, realSetID, isEquipped, numItems, numEquipped, _numInv, numLost, numIgnored =
                     ns.Util.SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
-                self.api:Print(
+                ns.Print(
                     string.format(
                         "   id=%s realSetID=%s %s | isEquipped=%s items=%s/%s lost=%s ignored=%s ok=%s",
                         tostring(setID),
@@ -337,9 +334,9 @@ function Diagnostics:PrintRawDump()
     if caps.hasSituations then
         local _okActive, activeID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
         local _okViewed, viewedID = SafeCall(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
-        local _okOutfits, outfits = SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
+        local outfits = ns.OutfitCache:GetOutfits()
 
-        self.api:Print(
+        ns.Print(
             string.format(
                 "|cffffd100-- outfits (active id=%s, viewed id=%s) --|r",
                 tostring(activeID),
@@ -347,7 +344,7 @@ function Diagnostics:PrintRawDump()
             )
         )
 
-        for _, info in ipairs(type(outfits) == "table" and outfits or {}) do
+        for _, info in ipairs(outfits) do
             local marks = ""
             if info.outfitID == activeID then
                 marks = marks .. " |cff00ff00[active]|r"
@@ -356,7 +353,7 @@ function Diagnostics:PrintRawDump()
                 marks = marks .. " |cff00ccff[viewed]|r"
             end
 
-            self.api:Print(
+            ns.Print(
                 string.format(
                     "   #%s id=%s %s | situations: %s | event=%s disabled=%s%s",
                     tostring(info.playerFacingOutfitIndex),
@@ -374,10 +371,10 @@ function Diagnostics:PrintRawDump()
     -- Two assignment columns on purpose: `value` is the flag on the option tree, `api` is
     -- what GetOutfitSituation(option) answers -- the call Blizzard's own dropdown uses. The
     -- cache trusts the api column; this is where a disagreement between them would show.
-    self.api:Print("|cffffd100-- categories (name | situationID spec loadout equipSet | value api) --|r")
+    ns.Print("|cffffd100-- categories (name | situationID spec loadout equipSet | value api) --|r")
     for _, category in ipairs(ns.Triggers:GetCategories()) do
         local result = ns.Triggers:Resolve(category.triggerID)
-        self.api:Print(
+        ns.Print(
             string.format(
                 "|cffffd100[%d] %s|r radio=%s -> state=%s situationID=%s specID=%s loadoutID=%s equipSetID=%s",
                 category.triggerID,
@@ -395,7 +392,7 @@ function Diagnostics:PrintRawDump()
             for _, optionData in ipairs(groupData.optionData or {}) do
                 local option = optionData.option or {}
                 local assigned, source = ns.OutfitCache.IsAssigned(optionData)
-                self.api:Print(
+                ns.Print(
                     string.format(
                         "   %-28s | %s %s %s %s | value=%s api=%s%s",
                         tostring(optionData.name),
@@ -417,25 +414,24 @@ end
 -- fills by browsing outfits, so the output always says how complete that cache is.
 function Diagnostics:PrintEligible()
     if not ns.Capabilities.hasSituations then
-        self.api:Print("Situations are not available on this client.")
+        ns.Print("Situations are not available on this client.")
         return
     end
 
     local eligible, rejected = ns.Eligibility:GetEligible()
-    local unrecorded = ns.OutfitCache:GetUnrecordedOutfits()
 
     if #eligible == 0 then
-        self.api:Print("No outfit matches the current situation.")
+        ns.Print("No outfit matches the current situation.")
     else
         -- Unranked on purpose: Blizzard picks among every eligible outfit at random. The
         -- marker is the one it actually applied, not one we prefer.
         local okActive, activeOutfitID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
-        self.api:Print(
+        ns.Print(
             #eligible > 1 and "Eligible outfits (Blizzard picks one at random):" or "Eligible outfit:"
         )
         for _, entry in ipairs(eligible) do
             local marker = (okActive and entry.outfitID == activeOutfitID) and "|cff00ff00>|r" or " "
-            self.api:Print(
+            ns.Print(
                 string.format(
                     "  %s %s (#%s) |cff808080- %s|r",
                     marker,
@@ -451,13 +447,13 @@ function Diagnostics:PrintEligible()
     -- and a bare count cannot say which outfit it means.
     local notRecorded = {}
     for _, entry in ipairs(rejected) do
-        if entry.reason == "not recorded" or entry.reason == "changed since last viewed" then
+        if ns.Eligibility.IsCacheGap(entry.reason) then
             table.insert(notRecorded, entry)
         end
     end
 
     if #notRecorded > 0 then
-        self.api:Print(
+        ns.Print(
             string.format(
                 "|cffffcc00%d of %d outfits have never been viewed or changed since, so they cannot be matched yet:|r",
                 #notRecorded,
@@ -465,77 +461,82 @@ function Diagnostics:PrintEligible()
             )
         )
         for _, entry in ipairs(notRecorded) do
-            self.api:Print(
+            ns.Print(
                 string.format("  |cffffcc00%s (#%s) - %s|r", entry.name, tostring(entry.index), entry.reason)
             )
         end
-        self.api:Print("Open the transmog Situations tab and click through them, or use /bs scan.")
+        ns.Print("Open the transmog Situations tab and click through them, or use /bs scan.")
     end
 
     if ns.BetterSituation.db.debug and #rejected > 0 then
-        self.api:Print("Rejected:")
+        ns.Print("Rejected:")
         for _, entry in ipairs(rejected) do
-            self.api:Print(string.format("  |cff808080%s - %s|r", entry.name, tostring(entry.reason)))
+            ns.Print(string.format("  |cff808080%s - %s|r", entry.name, tostring(entry.reason)))
         end
     end
 
-    if #unrecorded == 0 and #notRecorded == 0 then
-        self.api:Print(string.format("|cff808080All %d outfits recorded.|r", ns.OutfitCache:Count()))
+    if #notRecorded == 0 then
+        ns.Print(string.format("|cff808080All %d outfits recorded.|r", ns.OutfitCache:Count()))
     end
 end
 
 function Diagnostics:PrintVerify()
     if not ns.Capabilities.hasSituations then
-        self.api:Print("Situations are not available on this client.")
+        ns.Print("Situations are not available on this client.")
         return
     end
 
     local report = ns.Eligibility:Verify()
     if not report then
-        self.api:Print("Could not read the active outfit.")
+        ns.Print("Could not read the active outfit.")
         return
     end
 
     local outfitsByID = self:GetOutfitsByID()
 
-    self.api:Print("Blizzard applied: " .. self:DescribeOutfit(report.activeOutfitID, outfitsByID))
+    ns.Print("Blizzard applied: " .. self:DescribeOutfit(report.activeOutfitID, outfitsByID))
 
     local names = {}
     for _, entry in ipairs(report.eligible) do
         table.insert(names, string.format("%s (#%s)", tostring(entry.name), tostring(entry.index)))
     end
-    self.api:Print("Eligible: " .. (#names > 0 and table.concat(names, ", ") or "none"))
+    ns.Print("Eligible: " .. (#names > 0 and table.concat(names, ", ") or "none"))
 
     if report.agrees then
         if #report.eligible > 1 then
-            self.api:Print(
+            ns.Print(
                 string.format(
                     "|cff00ff00Consistent: the applied outfit is one of the %d eligible (Blizzard picks among them at random).|r",
                     #report.eligible
                 )
             )
         else
-            self.api:Print("|cff00ff00Consistent with our rules.|r")
+            ns.Print("|cff00ff00Consistent with our rules.|r")
         end
     elseif not report.activeRecorded then
         -- Not a disagreement: the outfit Blizzard applied has no usable cache entry, so it
         -- was rejected before a single rule was consulted. Saying "the rules are incomplete"
         -- here would be an accusation the run cannot support.
-        self.api:Print(
+        ns.Print(
             string.format(
                 "|cffffcc00Not scored: %s has never been viewed, or has changed since, so it could not be matched at all.|r",
                 self:DescribeOutfit(report.activeOutfitID, outfitsByID)
             )
         )
-        self.api:Print("Open the transmog Situations tab and click through your outfits, or use /bs scan, then try again.")
+        ns.Print("Open the transmog Situations tab and click through your outfits, or use /bs scan, then try again.")
     else
         -- The one outcome that indicts the rules: the outfit Blizzard applied is recorded and
         -- current, yet we say it does not fit the situation.
-        self.api:Print("|cffff5555Disagrees - the outfit Blizzard applied does not match our rules.|r")
-        self.api:Print("The pick only changes when a situation does, so if one changed since, trigger it again first.")
+        ns.Print(
+            string.format(
+                "|cffff5555Disagrees - the outfit Blizzard applied does not match our rules: %s.|r",
+                tostring(report.activeReason or "not in the outfit list")
+            )
+        )
+        ns.Print("The pick only changes when a situation does, so if one changed since, trigger it again first.")
     end
 
-    self.api:Print(
+    ns.Print(
         string.format(
             "|cff808080%d outfits recorded, %d never viewed or changed since.|r",
             report.recorded,
@@ -544,6 +545,3 @@ function Diagnostics:PrintVerify()
     )
 end
 
-function Diagnostics:Init(api)
-    self.api = api
-end

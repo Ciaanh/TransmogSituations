@@ -7,7 +7,7 @@ local _, ns = ...
 local Capabilities = {}
 ns.Capabilities = Capabilities
 
-function Capabilities:Probe()
+function Capabilities:Init()
     self.hasSituations = type(C_TransmogOutfitInfo) == "table" and
         type(C_TransmogOutfitInfo.GetUISituationCategoriesAndOptions) == "function"
 
@@ -38,10 +38,4 @@ function Capabilities:Probe()
     -- the selected loadout is part of the current value. Present on both clients.
     self.hasTalentLoadouts = type(C_ClassTalents) == "table" and
         type(C_ClassTalents.GetLastSelectedSavedConfigID) == "function"
-
-    return self
-end
-
-function Capabilities:Init()
-    self:Probe()
 end

@@ -10,6 +10,14 @@ local _, ns = ...
 local Eligibility = {}
 ns.Eligibility = Eligibility
 
+-- Why an outfit could not even be compared: a gap in the cache, not a verdict of the rules.
+Eligibility.NOT_RECORDED = "not recorded"
+Eligibility.STALE = "changed since last viewed"
+
+function Eligibility.IsCacheGap(reason)
+    return reason == Eligibility.NOT_RECORDED or reason == Eligibility.STALE
+end
+
 -- Every option key that is true right now, per category. Categories can be multi-valued (a
 -- house is also a rest area; a talent loadout is also its spec), so a category can contribute
 -- more than one key. Triggers already normalised the secondary ones into alsoOptions.
@@ -32,7 +40,7 @@ function Eligibility:GetCurrentKeys()
             keys = keys,
             resolved = result.state == ns.Triggers.STATE_OK,
             categoryName = entry.categoryName,
-            displayName = entry.displayName
+            valueName = result.optionName
         }
     end
 
@@ -40,26 +48,26 @@ function Eligibility:GetCurrentKeys()
 end
 
 -- An outfit matches when every category it constrains is satisfied. `info` is the outfit's
--- GetOutfitsInfo entry, used to catch a cache entry the outfit has since outgrown.
+-- GetOutfitsInfo entry, used to catch a cache entry the outfit has since outgrown. Returns
+-- true plus the names of the categories it pins, or false/nil plus the reason.
 function Eligibility:Match(outfitID, current, info)
     local entry = ns.OutfitCache:Get(outfitID)
     if not entry then
-        return nil, "not recorded"
+        return nil, Eligibility.NOT_RECORDED
     end
 
     if ns.OutfitCache:IsStale(outfitID, info) then
-        return nil, "changed since last viewed"
+        return nil, Eligibility.STALE
     end
 
-    local matched, unconstrained = {}, 0
+    local matched = {}
 
     for triggerID, selected in pairs(entry.categories) do
         -- Nothing selected in a category, or an "All ..." selection, means the outfit does
         -- not care about it. Wildcards are decided before anything is asked of the live
         -- value: on Retail the Weather trigger is permanently unsupported, and an outfit
-        -- ticked "All Weather" must still match there. (If Blizzard's defaults tick every
-        -- "All", the old order rejected every outfit on Retail.)
-        if selected.any and not selected.wildcard then
+        -- ticked "All Weather" must still match there.
+        if ns.OutfitCache.Constrains(selected) then
             local live = current[triggerID]
 
             if not live then
@@ -80,58 +88,38 @@ function Eligibility:Match(outfitID, current, info)
             end
 
             if not hit then
-                return false, string.format("%s is %s", live.categoryName, tostring(live.displayName))
+                return false, string.format("%s is %s", live.categoryName, tostring(live.valueName))
             end
 
             table.insert(matched, live.categoryName)
-        else
-            unconstrained = unconstrained + 1
         end
     end
 
-    return true, nil, matched, unconstrained
+    return true, nil, matched
 end
 
--- All matching outfits, in the outfit list's order. They are not ranked: Blizzard treats every
--- eligible outfit as equal and picks one at random. Its own Situations tab says "If multiple
--- outfits are equally valid, one will be chosen randomly", and the Retail tiebreak run
--- (2026-09-23) confirmed that "equally valid" means *every* match -- five re-picks with three
--- outfits eligible, constraining 3, 2 and 1 categories, landed on all three. Ranking by
--- specificity, as this used to, was wrong. `specificity` is kept on each entry as a plain count
--- of the categories the outfit pins, for display only.
+-- All matching outfits, in the outfit list's order, and all the others with the reason each was
+-- rejected. The eligible ones are not ranked: Blizzard treats every eligible outfit as equal and
+-- picks one at random. Its own Situations tab says "If multiple outfits are equally valid, one
+-- will be chosen randomly", and the Retail tiebreak run (2026-09-23) confirmed that "equally
+-- valid" means *every* match -- five re-picks with three outfits eligible, constraining 3, 2 and
+-- 1 categories, landed on all three. `specificity` is a plain count of the categories an outfit
+-- pins, for display only.
 function Eligibility:GetEligible()
     local current = self:GetCurrentKeys()
     local eligible, rejected = {}, {}
 
-    local ok, outfits = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
-    if not ok or type(outfits) ~= "table" then
-        return eligible, rejected, current
-    end
-
-    for _, info in ipairs(outfits) do
+    for _, info in ipairs(ns.OutfitCache:GetOutfits()) do
         local isMatch, reason, matched = self:Match(info.outfitID, current, info)
+        local row = { outfitID = info.outfitID, name = info.name, index = info.playerFacingOutfitIndex }
 
         if isMatch then
-            table.insert(
-                eligible,
-                {
-                    outfitID = info.outfitID,
-                    name = info.name,
-                    index = info.playerFacingOutfitIndex,
-                    specificity = #matched,
-                    matched = matched
-                }
-            )
+            row.matched = matched
+            row.specificity = #matched
+            table.insert(eligible, row)
         else
-            table.insert(
-                rejected,
-                {
-                    outfitID = info.outfitID,
-                    name = info.name,
-                    index = info.playerFacingOutfitIndex,
-                    reason = reason
-                }
-            )
+            row.reason = reason
+            table.insert(rejected, row)
         end
     end
 
@@ -146,56 +134,50 @@ function Eligibility:GetEligible()
 end
 
 -- Score the matching rules against the outfit Blizzard actually applied. With a random pick
--- among equals there is no single outfit to predict, so the test is membership: the rules
--- hold when the applied outfit is one of the eligible ones. The pick is also sticky -- no
--- situation change, no re-pick, and /reload keeps it (Retail, 2026-09-23) -- so a verify taken
--- long after the last trigger scores the pick made then, against the rules as they are now.
+-- among equals there is no single outfit to predict, so the test is membership: the rules hold
+-- when the applied outfit is one of the eligible ones. The pick is also sticky -- no situation
+-- change, no re-pick, and /reload keeps it (Retail, 2026-09-23) -- so a verify taken long after
+-- the last trigger scores the pick made then, against the rules as they are now.
+--
+-- GetEligible already sorted every outfit into eligible or rejected-with-a-reason, so the verdict
+-- is read off the applied outfit's row. A cache gap (never viewed, changed since) means it could
+-- not have been matched at all, which says nothing about the rules.
 function Eligibility:Verify()
     local okActive, activeOutfitID = ns.Util.SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
     if not okActive then
         return nil
     end
 
-    local eligible = self:GetEligible()
+    local eligible, rejected = self:GetEligible()
+    local report = {
+        activeOutfitID = activeOutfitID,
+        eligible = eligible,
+        recorded = ns.OutfitCache:Count(),
+        unrecorded = 0,
+        activeEligible = false,
+        activeRecorded = false
+    }
 
-    -- The applied outfit can only be scored if we could have matched it. While the
-    -- active outfit has no usable cache entry (never viewed, or changed since), Match rejects
-    -- it out of hand, so it can never be among the eligible, and the resulting disagreement
-    -- says nothing whatever about the matching rules. Report the
-    -- difference so a gap in the cache is never read as evidence against the matcher.
-    local activeRecorded = false
-    if type(activeOutfitID) == "number" and activeOutfitID ~= 0 and ns.OutfitCache:Get(activeOutfitID) then
-        local okOutfits, outfits = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
-        local activeInfo = nil
-        for _, info in ipairs(okOutfits and type(outfits) == "table" and outfits or {}) do
-            if info.outfitID == activeOutfitID then
-                activeInfo = info
-            end
+    for _, row in ipairs(eligible) do
+        if row.outfitID == activeOutfitID then
+            report.activeEligible = true
+            report.activeRecorded = true
         end
-        activeRecorded = not ns.OutfitCache:IsStale(activeOutfitID, activeInfo)
     end
 
-    local activeEligible = false
-    for _, entry in ipairs(eligible) do
-        if entry.outfitID == activeOutfitID then
-            activeEligible = true
+    for _, row in ipairs(rejected) do
+        if Eligibility.IsCacheGap(row.reason) then
+            report.unrecorded = report.unrecorded + 1
+        end
+        if row.outfitID == activeOutfitID then
+            report.activeReason = row.reason
+            report.activeRecorded = not Eligibility.IsCacheGap(row.reason)
         end
     end
 
     -- No outfit applied and none eligible is agreement too.
     local noneApplied = type(activeOutfitID) ~= "number" or activeOutfitID == 0
+    report.agrees = report.activeEligible or (noneApplied and #eligible == 0)
 
-    return {
-        activeOutfitID = activeOutfitID,
-        activeRecorded = activeRecorded,
-        activeEligible = activeEligible,
-        agrees = activeEligible or (noneApplied and #eligible == 0),
-        eligible = eligible,
-        recorded = ns.OutfitCache:Count(),
-        unrecorded = #ns.OutfitCache:GetUnrecordedOutfits()
-    }
-end
-
-function Eligibility:Init(api)
-    self.api = api
+    return report
 end

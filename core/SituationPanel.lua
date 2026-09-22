@@ -65,7 +65,7 @@ function SituationPanel:RefreshRows()
             local value = AcquireValueText(situationFrame)
             if value then
                 local result = ns.Triggers:Resolve(triggerID)
-                local displayName = ns.Triggers:GetDisplayName(triggerID, result)
+                local displayName = result.optionName
 
                 if result.state == ns.Triggers.STATE_OK and displayName then
                     value:SetText(displayName)
@@ -241,8 +241,7 @@ function SituationPanel:TryAttach()
     end
 end
 
-function SituationPanel:Init(api)
-    self.api = api
+function SituationPanel:Init()
 
     if not ns.Capabilities.hasSituations then
         return

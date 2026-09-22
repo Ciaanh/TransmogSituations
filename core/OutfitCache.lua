@@ -122,19 +122,17 @@ function OutfitCache:RecordViewed()
         return nil
     end
 
-    local entry = { at = time(), categories = {} }
+    local entry = { categories = {} }
     local sawAny = false
 
     for _, category in ipairs(categories) do
         local selected = { wildcard = false, keys = {} }
-        local any = false
 
         for _, optionData in ipairs(ns.Triggers:GetOptions(category.triggerID)) do
             if OutfitCache.IsAssigned(optionData) then
                 local key = OutfitCache.OptionKey(optionData.option)
                 if key then
                     selected.keys[key] = true
-                    any = true
                     sawAny = true
 
                     if ns.Triggers.WILDCARD_SITUATIONS[optionData.option.situationID] then
@@ -145,8 +143,7 @@ function OutfitCache:RecordViewed()
         end
 
         -- A category with nothing selected is unconstrained, which is a real state; it is
-        -- stored so we can tell it apart from "never recorded".
-        selected.any = any
+        -- stored (with empty keys) so we can tell it apart from "never recorded".
         entry.categories[category.triggerID] = selected
     end
 
@@ -198,7 +195,7 @@ function OutfitCache:IsStale(outfitID, info)
 
     local recorded = {}
     for triggerID, selected in pairs(entry.categories) do
-        if selected.any and not selected.wildcard then
+        if OutfitCache.Constrains(selected) then
             local name = names[triggerID]
             if not name or not expected[name] then
                 return true
@@ -214,6 +211,22 @@ function OutfitCache:IsStale(outfitID, info)
     end
 
     return false
+end
+
+-- Whether a recorded category selection actually constrains anything: something is selected,
+-- and it is not an "All ..." wildcard.
+function OutfitCache.Constrains(selected)
+    return selected ~= nil and next(selected.keys) ~= nil and not selected.wildcard
+end
+
+-- The client's outfit list, or an empty one. Every consumer reads it through here.
+function OutfitCache:GetOutfits()
+    if not ns.Capabilities.hasSituations then
+        return {}
+    end
+
+    local ok, outfits = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
+    return (ok and type(outfits) == "table") and outfits or {}
 end
 
 function OutfitCache:Count()
@@ -251,9 +264,13 @@ end
 -- Drop entries for outfits the client no longer lists. Deleted outfits would otherwise sit in
 -- SavedVariables forever, inflate Count(), and -- should the client ever reuse an id -- hand a
 -- new outfit a dead one's assignments. Returns how many were dropped.
+--
+-- An empty list is never taken as "every outfit was deleted": the client can answer with
+-- nothing before its outfit data has arrived, and pruning then would wipe the whole cache.
 function OutfitCache:Prune(outfits)
+    outfits = outfits or self:GetOutfits()
     local store = self:GetStore(false)
-    if not store then
+    if not store or #outfits == 0 then
         return 0
     end
 
@@ -274,23 +291,11 @@ function OutfitCache:Prune(outfits)
 end
 
 -- Outfits the client knows about that we have no usable entry for: never viewed, or changed
--- since they were (IsStale). Also the one place that sees the full outfit list, so entries for
--- deleted outfits are pruned here. /bs scan re-records whatever this returns.
+-- since they were (IsStale). /bs scan re-records whatever this returns.
 function OutfitCache:GetUnrecordedOutfits()
     local missing = {}
 
-    if not ns.Capabilities.hasSituations then
-        return missing
-    end
-
-    local ok, outfits = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
-    if not ok or type(outfits) ~= "table" then
-        return missing
-    end
-
-    self:Prune(outfits)
-
-    for _, info in ipairs(outfits) do
+    for _, info in ipairs(self:GetOutfits()) do
         if not self:Get(info.outfitID) or self:IsStale(info.outfitID, info) then
             table.insert(missing, info)
         end
@@ -307,12 +312,8 @@ end
 -- original viewed outfit is restored at the end.
 local SCAN_STEP = 0.2
 
-function OutfitCache:Scan(onDone)
-    local function Report(msg)
-        if self.api then
-            self.api:Print(msg)
-        end
-    end
+function OutfitCache:Scan()
+    local Report = ns.Print
 
     if self.scanning then
         Report("A scan is already running.")
@@ -346,12 +347,10 @@ function OutfitCache:Scan(onDone)
         return false
     end
 
+    self:Prune()
     local pending = self:GetUnrecordedOutfits()
     if #pending == 0 then
         Report("Every outfit is already recorded.")
-        if onDone then
-            onDone(0, 0)
-        end
         return true
     end
 
@@ -374,10 +373,6 @@ function OutfitCache:Scan(onDone)
             )
         else
             Report(string.format("Scan finished: %d outfit(s) recorded.", recorded))
-        end
-
-        if onDone then
-            onDone(recorded, failed)
         end
     end
 
@@ -416,9 +411,7 @@ function OutfitCache:Scan(onDone)
     return true
 end
 
-function OutfitCache:Init(api)
-    self.api = api
-
+function OutfitCache:Init()
     if not ns.Capabilities.hasSituations then
         return
     end
@@ -428,7 +421,12 @@ function OutfitCache:Init(api)
     local watcher = CreateFrame("Frame")
     watcher:SetScript(
         "OnEvent",
-        function()
+        function(_, event)
+            -- The outfit list itself changed (created, deleted, renamed): the one moment to
+            -- forget outfits that are gone.
+            if event == "TRANSMOG_OUTFITS_CHANGED" then
+                self:Prune()
+            end
             self:RecordViewed()
         end
     )
@@ -438,7 +436,7 @@ function OutfitCache:Init(api)
             "VIEWED_TRANSMOG_OUTFIT_CHANGED",
             "VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED",
             -- Fired when the outfit list is rebuilt, which is how the list label picks up a
-            -- committed edit. Cheap insurance for the commit path below.
+            -- committed edit: cheap insurance for the commit path below, and when to prune.
             "TRANSMOG_OUTFITS_CHANGED"
         }
     )

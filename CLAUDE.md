@@ -76,9 +76,16 @@ consumers, `OutfitCache` before `Diagnostics`. Adding a new file means adding it
 **and** to `$includes` in `make-release.ps1` (which ships only the listed files, so `docs/` never
 reaches the zip).
 
-Module pattern: every file does `local _, ns = ...`, assigns a table onto `ns`, and exposes
-`Module:Init(api)`. `BetterSituation.lua` calls each `Init` from its `ADDON_LOADED` handler and
-passes the addon table, which provides `api:Print(msg)`. Use `api:Print`, never bare `print`.
+Module pattern: every file does `local _, ns = ...` and assigns a table onto `ns`. A module with
+setup to do exposes `Module:Init()`, which `BetterSituation.lua` calls from its `ADDON_LOADED`
+handler. Chat output goes through `ns.Print(msg)`, never bare `print`. Slash commands are one
+`COMMANDS` table in `BetterSituation.lua` that drives both the dispatch and `/bs help`.
+
+A resolved value is `{ state, situationID, optionName, option, alsoOptions, ... }`; `ResolveAll()`
+wraps each in `{ triggerID, categoryName, result }`. Options are looked up with one function,
+`Triggers:FindOption(triggerID, situationID, fields)`. The outfit list is read through
+`OutfitCache:GetOutfits()`; reports never prune the cache (that happens on
+`TRANSMOG_OUTFITS_CHANGED` and at the start of `/bs scan`, and never on an empty list).
 
 **Everything reads `ns.Triggers`.** Chat, the tab overlay, the standalone panel and the
 eligibility matcher are four renderers over one model. A new consumer reads `ResolveAll()` or

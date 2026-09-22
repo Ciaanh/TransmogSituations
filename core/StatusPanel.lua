@@ -184,10 +184,10 @@ function StatusPanel:Refresh()
         local result = entry.result
         local text, r, g, b
 
-        if result.state == ns.Triggers.STATE_OK and entry.displayName then
-            text = entry.displayName
-            if entry.alsoNames and #entry.alsoNames > 0 then
-                text = string.format("%s +%d", text, #entry.alsoNames)
+        if result.state == ns.Triggers.STATE_OK and result.optionName then
+            text = result.optionName
+            if result.alsoOptions and #result.alsoOptions > 0 then
+                text = string.format("%s +%d", text, #result.alsoOptions)
             end
             if result.approximate or result.ambiguous then
                 text = text .. " ~"
@@ -283,8 +283,7 @@ function StatusPanel:Toggle()
     end
 end
 
-function StatusPanel:Init(api)
-    self.api = api
+function StatusPanel:Init()
 
     local saved = EnsureSaved()
     if saved and saved.shown then

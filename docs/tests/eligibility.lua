@@ -149,11 +149,29 @@ H.Check("the unrecorded outfit is recorded", ns.OutfitCache:Get(5) ~= nil, true)
 H.Check("the original viewed outfit is restored", H.viewedOutfitID, 3)
 TransmogFrame = nil
 
--- Deleting an outfit must drop its cache entry the next time the outfit list is consulted.
+-- Deleting an outfit must drop its cache entry when the client says the list changed -- and
+-- only then: reports read the list without side effects, and an empty answer is not a wipe.
 H.Section("prune")
+local fullList = H.outfits
 table.remove(H.outfits, 3) -- Raiding (id 4) is gone
-ns.OutfitCache:GetUnrecordedOutfits()
-H.Check("deleted outfit pruned", ns.OutfitCache:Get(4), nil)
+ns.Eligibility:Verify()
+H.Check("a report does not prune", ns.OutfitCache:Get(4) ~= nil, true)
+H.outfits = {}
+H.Fire("TRANSMOG_OUTFITS_CHANGED")
+H.Check("an empty outfit list prunes nothing", ns.OutfitCache:Count(), 4)
+H.outfits = fullList
+H.Fire("TRANSMOG_OUTFITS_CHANGED")
+H.Check("deleted outfit pruned on TRANSMOG_OUTFITS_CHANGED", ns.OutfitCache:Get(4), nil)
 H.Check("count follows", ns.OutfitCache:Count(), 3)
+
+-- The reason Blizzard's pick disagrees is part of the report.
+H.Section("verify reasons")
+H.activeOutfitID = 2
+H.W.resting, H.W.inInstance, H.W.instanceType = false, true, "raid"
+Record(2, { ["4:0:0:0"] = true }) -- Combat: Rest Area only
+H.viewedOutfitID = 3
+local disagreement = ns.Eligibility:Verify()
+H.Check("disagrees", disagreement.agrees, false)
+H.Check("says why", disagreement.activeReason, "Locations is Raids")
 
 H.Done()

@@ -196,9 +196,19 @@ function Triggers:GetOptions(triggerID)
     return ordered
 end
 
--- Find the option carrying a situationID. Returns nil when this client doesn't offer it,
--- which is a real answer (Forever has no House), not a failure to be papered over.
-function Triggers:FindOptionBySituation(triggerID, situationID)
+-- Find the option carrying a situationID and, optionally, the given secondary ids. Returns nil
+-- when this client doesn't offer it, which is a real answer (Forever has no House), not a
+-- failure to be papered over.
+--
+-- Specializations and Equipment Sets have a variable number of options that all share one
+-- situationID, so they are told apart by the ids the option carries, and every field given must
+-- match. Equipment set ids start at 0 and "All Equipment Sets" also carries equipmentSetID 0, so
+-- a field alone is ambiguous -- the situationID separates the All row (18) from a specific set
+-- (19), exactly as it separates All Specializations (1) from a spec (2). Specializations go one
+-- level deeper: the per-spec option carries loadoutID 0 and each saved talent loadout gets its
+-- own option with the same specID and its configID as loadoutID (confirmed on Retail), so
+-- loadoutID must be part of the match or a loadout option is mistaken for its spec.
+function Triggers:FindOption(triggerID, situationID, fields)
     if not situationID then
         return nil
     end
@@ -206,27 +216,8 @@ function Triggers:FindOptionBySituation(triggerID, situationID)
     for _, optionData in ipairs(self:GetOptions(triggerID)) do
         local option = optionData.option
         if option and option.situationID == situationID then
-            return optionData
-        end
-    end
-
-    return nil
-end
-
--- Specializations and Equipment Sets have a variable number of options that all share one
--- situationID, so they are told apart by the ids the option carries. Every field given must
--- match: equipment set ids start at 0 and "All Equipment Sets" also carries equipmentSetID 0,
--- so a field alone is ambiguous -- the situationID separates the All row (18) from a specific
--- set (19), exactly as it separates All Specializations (1) from a spec (2). Specializations
--- go one level deeper: the per-spec option carries loadoutID 0 and each saved talent loadout
--- gets its own option with the same specID and its configID as loadoutID (confirmed on Retail),
--- so loadoutID must be part of the match or a loadout option is mistaken for its spec.
-function Triggers:FindOptionBySituationAndFields(triggerID, situationID, fields)
-    for _, optionData in ipairs(self:GetOptions(triggerID)) do
-        local option = optionData.option
-        if option and option.situationID == situationID then
             local all = true
-            for field, value in pairs(fields) do
+            for field, value in pairs(fields or {}) do
                 if option[field] ~= value then
                     all = false
                     break
@@ -634,11 +625,30 @@ resolvers[UI_TRIGGER.TimeOfDay] = {
     end
 }
 
-Triggers.resolvers = resolvers
-
 --------------------------------------------------------------------------------
 -- Public API
 --------------------------------------------------------------------------------
+
+-- The secondary ids that identify a resolved value's option, beyond its situationID.
+local function IdentityFields(result)
+    if result.specID then
+        return { specID = result.specID, loadoutID = 0 }
+    end
+
+    if result.equipmentSetID then
+        return { equipmentSetID = result.equipmentSetID }
+    end
+
+    return nil
+end
+
+local function DescribeIdentity(result)
+    local text = "situationID " .. tostring(result.situationID)
+    for field, value in pairs(IdentityFields(result) or {}) do
+        text = string.format("%s %s %s", text, field, tostring(value))
+    end
+    return text
+end
 
 -- Attach the client's own option to a resolved value: its localized name, and confirmation
 -- that this client offers the situation at all.
@@ -653,58 +663,33 @@ function Triggers:AttachOption(triggerID, result)
         return result
     end
 
-    local optionData = nil
+    local optionData = self:FindOption(triggerID, result.situationID, IdentityFields(result))
     local alsoOptions = {}
 
-    if result.specID then
-        -- The per-spec option is the one every client lists; a loadout option is more specific
-        -- and becomes the value when this client offers it, with the spec option kept alongside.
-        local specOption =
-            self:FindOptionBySituationAndFields(triggerID, result.situationID, { specID = result.specID, loadoutID = 0 })
-        local loadoutOption = nil
-        if result.loadoutID then
-            loadoutOption = self:FindOptionBySituationAndFields(
-                triggerID,
-                result.situationID,
-                { specID = result.specID, loadoutID = result.loadoutID }
-            )
-        end
-
+    -- A saved loadout's option is more specific than its spec's, and becomes the value when this
+    -- client offers it, with the spec option kept alongside. A deleted loadout falls back.
+    if result.loadoutID then
+        local loadoutOption =
+            self:FindOption(triggerID, result.situationID, { specID = result.specID, loadoutID = result.loadoutID })
         if loadoutOption then
-            optionData = loadoutOption
-            if specOption then
-                table.insert(alsoOptions, specOption)
+            if optionData then
+                table.insert(alsoOptions, optionData)
             end
-        else
-            optionData = specOption
+            optionData = loadoutOption
         end
-    elseif result.equipmentSetID then
-        optionData = self:FindOptionBySituationAndFields(
-            triggerID,
-            result.situationID,
-            { equipmentSetID = result.equipmentSetID }
-        )
-    else
-        optionData = self:FindOptionBySituation(triggerID, result.situationID)
     end
 
     if not optionData then
         -- This client doesn't offer the situation we resolved to. Say so plainly rather
         -- than falling back to a neighbouring option.
         result.state = STATE_UNKNOWN
-        if result.specID then
-            result.reason = "no option with specID " .. tostring(result.specID)
-        elseif result.equipmentSetID then
-            result.reason = "no option with equipmentSetID " .. tostring(result.equipmentSetID)
-        else
-            result.reason = "no option with situationID " .. tostring(result.situationID)
-        end
+        result.reason = "no option with " .. DescribeIdentity(result)
         return result
     end
 
     -- Secondary situationIDs from the resolver. Silently skips any this client doesn't offer.
     for _, situationID in ipairs(result.also or {}) do
-        local alsoData = self:FindOptionBySituation(triggerID, situationID)
+        local alsoData = self:FindOption(triggerID, situationID)
         if alsoData then
             table.insert(alsoOptions, alsoData)
         end
@@ -731,37 +716,18 @@ function Triggers:Resolve(triggerID)
     return self:AttachOption(triggerID, result)
 end
 
--- Localized display name for a resolved value, straight from the client's option list.
-function Triggers:GetDisplayName(triggerID, result)
-    return result and result.optionName or nil
-end
-
--- The other options that are also true right now (a house is also a rest area; a loadout is
--- also its spec), as the client's own display names.
-function Triggers:GetAlsoNames(_triggerID, result)
-    local names = {}
-
-    for _, optionData in ipairs(result and result.alsoOptions or {}) do
-        table.insert(names, optionData.name)
-    end
-
-    return names
-end
-
--- Resolve every category this client actually offers, in the client's own order.
+-- Resolve every category this client actually offers, in the client's own order. The value's
+-- localized name is result.optionName; the other options true right now are result.alsoOptions.
 function Triggers:ResolveAll()
     local resolved = {}
 
     for _, category in ipairs(self:GetCategories()) do
-        local result = self:Resolve(category.triggerID)
         table.insert(
             resolved,
             {
                 triggerID = category.triggerID,
                 categoryName = category.name,
-                result = result,
-                displayName = self:GetDisplayName(category.triggerID, result),
-                alsoNames = self:GetAlsoNames(category.triggerID, result)
+                result = self:Resolve(category.triggerID)
             }
         )
     end
@@ -801,8 +767,7 @@ function Triggers:NeedsPolling()
     return false
 end
 
-function Triggers:Init(api)
-    self.api = api
+function Triggers:Init()
     self:InvalidateCategories()
 
     -- Must listen all the time, not just while the Situations tab is open: we would miss

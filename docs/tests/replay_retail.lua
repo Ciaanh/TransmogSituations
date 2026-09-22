@@ -50,4 +50,18 @@ H.ClearChat()
 ns.Diagnostics:PrintEnvironmentSnapshot()
 H.Check("prints the Locations line", H.ChatText():find("Locations: House", 1, true) ~= nil, true)
 
+H.Section("slash commands")
+H.ClearChat()
+SlashCmdList.BETTERSITUATION("help")
+local help = H.ChatText()
+for _, name in ipairs({ "panel", "eligible", "verify", "scan", "list", "dump", "debug", "help" }) do
+    H.Check("/bs help lists " .. name, help:find("/bs " .. name, 1, true) ~= nil, true)
+end
+H.ClearChat()
+SlashCmdList.BETTERSITUATION("nonsense")
+H.Check("an unknown command says so", H.ChatText():find("Unknown command", 1, true) ~= nil, true)
+H.ClearChat()
+SlashCmdList.BETTERSITUATION("  VERIFY  ")
+H.Check("commands are trimmed and case-insensitive", H.ChatText():find("Blizzard applied", 1, true) ~= nil, true)
+
 H.Done()
