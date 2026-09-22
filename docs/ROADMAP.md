@@ -164,13 +164,14 @@ position, and the equipment-set id-0 guard — and each was caught only by a rea
       to check: the original viewed outfit is restored afterwards. It may refuse outright — `ChangeViewedOutfit` is `AllowedWhenUntainted`, so the
       client may not honour it from an addon. It guards and verifies each step, so a refusal should
       report "could not be viewed" rather than corrupt the cache. Confirm that is what happens.
-- [ ] **Specificity ranking is a guess.** When several outfits match, we prefer the one constraining
-      the most categories. Blizzard's actual tiebreak is unknown; `/bs verify` is how to find it.
-      Blizzard's own Situations tab text (both screenshots, 2026-09-22): *"If multiple outfits are
-      equally valid, one will be chosen randomly."* Whether "equally valid" means *every* match or
-      only matches of equal specificity is exactly the open question — "Tiebreak disagrees" from
-      `/bs verify` is evidence for the former. Also worth ruling out: Blizzard may keep the current
-      outfit while it stays valid rather than re-picking.
+- [x] ~~**Specificity ranking is a guess.**~~ ANSWERED on Retail, 2026-09-23: **there is no
+      ranking.** Blizzard's tab says *"If multiple outfits are equally valid, one will be chosen
+      randomly"*, and "equally valid" means every match. With Frost (3 categories), Mount (2) and
+      Ceremony (1) all eligible, five mount/dismount re-picks gave Frost, Ceremony, Frost,
+      Ceremony, Mount. The pick is also **sticky**: nothing changes without a situation trigger,
+      and `/reload` keeps it. Specificity ranking was removed: `/bs eligible` lists the eligible
+      outfits in list order and marks the applied one, and `/bs verify` agrees when the applied
+      outfit is among them.
 - [ ] **The cache must survive a relog.** `/reload` CONFIRMED on Retail, 2026-09-22: scan, `/reload`,
       and `/bs verify` still saw all 7 outfits. Logout/login CONFIRMED on Retail the same day: still 7
       recorded, and `/bs verify` agreed again (Blizzard applied "Frost", id 2; we predicted it).
@@ -364,7 +365,8 @@ An outfit is eligible when, for every category it constrains, the current value 
   further.
 - Radio categories (`isRadioButton`) have exactly one selection; checkbox categories have a set,
   and match if the current value is in it.
-- Several outfits can be eligible at once. Blizzard must have a tiebreak (specificity? outfit
+- Several outfits can be eligible at once. ANSWERED since: Blizzard picks one at random among all
+  of them, on a situation change only. (Originally: Blizzard must have a tiebreak (specificity? outfit
   order?) — this is **unknown** and has to be reverse-engineered.
 
 ### Validating the model instead of trusting it
@@ -404,7 +406,7 @@ core/Util.lua          SafeCall / SafeCallAll / RegisterEventsSafely
 core/Capabilities.lua  one-time probe of the optional systems (C_Weather, C_Housing, ...)
 core/Triggers.lua      THE model: situationID table, resolvers, category cache
 core/OutfitCache.lua   per-outfit situation assignments, recorded as the player browses
-core/Eligibility.lua   matching, specificity ranking, and Verify() against GetActiveOutfitID
+core/Eligibility.lua   matching, and Verify() against GetActiveOutfitID (membership, not rank)
 core/Diagnostics.lua   all chat output: /bs, list, dump, eligible, verify
 core/StatusPanel.lua   the standalone /bs panel frame
 core/SituationPanel.lua the inline values on Blizzard's Situations tab
@@ -416,9 +418,9 @@ scope), `Capabilities` before anything that probes, `Triggers` before its consum
 
 ## Open questions to settle in game
 
-0. **What is Blizzard's tiebreak when several outfits match?** Still unknown, and now the largest
-   open question: `core/Eligibility.lua` ranks by specificity (most categories constrained wins),
-   which is a guess. `/bs verify` exists to find the real rule from disagreements.
+0. ~~What is Blizzard's tiebreak when several outfits match?~~ ANSWERED (Retail, 2026-09-23): a
+   random pick among every eligible outfit, regardless of how many categories each constrains,
+   made only when a situation changes and kept across `/reload`. See the Phase 3/4 checks above.
 
 1. ~~Does `LocationHouse` mean player housing or any indoor space?~~ ANSWERED: player
    housing. `IsInInstance()` reports `"neighborhood"` on the outdoor plots and `"interior"`

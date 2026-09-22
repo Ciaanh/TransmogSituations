@@ -176,9 +176,10 @@ ns.Triggers:InvalidateCategories()
 print("in a raid as Assassination:")
 eligible = ns.Eligibility:GetEligible()
 Check("eligible count", #eligible, 2)
-Check("most specific first", eligible[1] and eligible[1].name, "Raiding")
-Check("specificity", eligible[1] and eligible[1].specificity, 2)
-Check("less specific second", eligible[2] and eligible[2].name, "Combat")
+-- Unranked: Blizzard picks among all of them at random, so the list keeps outfit order.
+Check("listed in outfit order", eligible[1] and eligible[1].name, "Combat")
+Check("second in outfit order", eligible[2] and eligible[2].name, "Raiding")
+Check("constrained categories counted", eligible[2] and eligible[2].specificity, 2)
 
 -- Same raid, wrong spec: Raiding constrains spec, Combat does not.
 C_SpecializationInfo.GetSpecializationInfo = function() return 260 end
@@ -205,6 +206,8 @@ local report = ns.Eligibility:Verify()
 Check("active outfit read", report and report.activeOutfitID, 3)
 Check("unrecorded counted", report and report.unrecorded, 1)
 
+Check("applied outfit among the eligible agrees", report and report.agrees, true)
+
 ACTIVE_OUTFIT = 4
 report = ns.Eligibility:Verify()
 Check("disagreement is detected", report and report.agrees, false)
@@ -216,13 +219,12 @@ ACTIVE_OUTFIT = 5
 report = ns.Eligibility:Verify()
 Check("unrecorded active outfit is not scorable", report and report.activeRecorded, false)
 
--- Blizzard applied an outfit that is eligible but less specific than our pick. That is a
--- tiebreak question, not a matching failure, and the report must carry enough to say so.
+-- Blizzard applied the less constrained of two eligible outfits. That is the random pick
+-- among equals, which the Retail run observed, so it must score as agreement.
 ACTIVE_OUTFIT = 2
 report = ns.Eligibility:Verify()
-Check("eligible-but-not-picked disagrees", report and report.agrees, false)
-Check("applied outfit's specificity reported", report and report.activeSpecificity, 0)
-Check("predicted outfit's specificity reported", report and report.predictedSpecificity, 1)
+Check("any eligible outfit agrees", report and report.agrees, true)
+Check("applied outfit reported eligible", report and report.activeEligible, true)
 ACTIVE_OUTFIT = 3
 
 -- An edit committed while the cache was not looking leaves an entry describing assignments

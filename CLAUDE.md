@@ -59,7 +59,7 @@ core/Util.lua                # SafeCall / SafeCallAll / RegisterEventsSafely / C
 core/Capabilities.lua        # one-time probe of the optional systems
 core/Triggers.lua            # THE model: situationID table, resolvers, category cache
 core/OutfitCache.lua         # per-outfit situation assignments, recorded as the player browses
-core/Eligibility.lua         # matching, specificity ranking, Verify() against GetActiveOutfitID
+core/Eligibility.lua         # matching, Verify() against GetActiveOutfitID
 core/Diagnostics.lua         # all chat output: /bs, list, dump, eligible, verify
 core/StatusPanel.lua         # the standalone /bs panel frame
 core/SituationPanel.lua      # inline values on Blizzard's Situations tab
@@ -206,8 +206,14 @@ valid, one will be chosen randomly."*
 
 `Eligibility` treats an unselected or "All ..." (wildcard) category as unconstrained *before*
 looking at the live value — so "All Weather" matches on Retail even though Weather is unsupported
-there. Specificity counts only non-wildcard categories. Blizzard's real tiebreak is unknown;
-`/bs verify` scores the prediction against `GetActiveOutfitID()`.
+there.
+
+**There is no ranking.** When several outfits are eligible Blizzard picks one at random, however
+many categories each constrains (Retail, 2026-09-23: Frost/Mount/Ceremony constraining 3/2/1 were
+all picked across five re-picks). The pick happens only on a situation change and survives
+`/reload`. So `/bs verify` scores *membership* — is `GetActiveOutfitID()` among the eligible — and
+never a single predicted outfit. Do not reintroduce specificity ranking; `specificity` on an
+eligible entry is a display count only.
 
 ## Conventions and gotchas
 

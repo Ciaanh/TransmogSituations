@@ -413,7 +413,7 @@ function Diagnostics:PrintRawDump()
     end
 end
 
--- Phase 4 reporting. Eligibility is a prediction reconstructed from a cache the player
+-- Phase 4 reporting. Eligibility is reconstructed from a cache the player
 -- fills by browsing outfits, so the output always says how complete that cache is.
 function Diagnostics:PrintEligible()
     if not ns.Capabilities.hasSituations then
@@ -427,16 +427,20 @@ function Diagnostics:PrintEligible()
     if #eligible == 0 then
         self.api:Print("No outfit matches the current situation.")
     else
-        self.api:Print("Eligible outfits, most specific first:")
-        for index, entry in ipairs(eligible) do
-            local marker = (index == 1) and "|cff00ff00>|r" or " "
+        -- Unranked on purpose: Blizzard picks among every eligible outfit at random. The
+        -- marker is the one it actually applied, not one we prefer.
+        local okActive, activeOutfitID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
+        self.api:Print(
+            #eligible > 1 and "Eligible outfits (Blizzard picks one at random):" or "Eligible outfit:"
+        )
+        for _, entry in ipairs(eligible) do
+            local marker = (okActive and entry.outfitID == activeOutfitID) and "|cff00ff00>|r" or " "
             self.api:Print(
                 string.format(
-                    "  %s %s (#%s) |cff808080- %d matched: %s|r",
+                    "  %s %s (#%s) |cff808080- %s|r",
                     marker,
                     entry.name,
                     tostring(entry.index),
-                    entry.specificity,
                     #entry.matched > 0 and table.concat(entry.matched, ", ") or "nothing constrained"
                 )
             )
@@ -495,10 +499,24 @@ function Diagnostics:PrintVerify()
     local outfitsByID = self:GetOutfitsByID()
 
     self.api:Print("Blizzard applied: " .. self:DescribeOutfit(report.activeOutfitID, outfitsByID))
-    self.api:Print("We would predict: " .. self:DescribeOutfit(report.predictedOutfitID, outfitsByID))
+
+    local names = {}
+    for _, entry in ipairs(report.eligible) do
+        table.insert(names, string.format("%s (#%s)", tostring(entry.name), tostring(entry.index)))
+    end
+    self.api:Print("Eligible: " .. (#names > 0 and table.concat(names, ", ") or "none"))
 
     if report.agrees then
-        self.api:Print("|cff00ff00Prediction agrees.|r")
+        if #report.eligible > 1 then
+            self.api:Print(
+                string.format(
+                    "|cff00ff00Consistent: the applied outfit is one of the %d eligible (Blizzard picks among them at random).|r",
+                    #report.eligible
+                )
+            )
+        else
+            self.api:Print("|cff00ff00Consistent with our rules.|r")
+        end
     elseif not report.activeRecorded then
         -- Not a disagreement: the outfit Blizzard applied has no usable cache entry, so it
         -- was rejected before a single rule was consulted. Saying "the rules are incomplete"
@@ -510,28 +528,11 @@ function Diagnostics:PrintVerify()
             )
         )
         self.api:Print("Open the transmog Situations tab and click through your outfits, or use /bs scan, then try again.")
-    elseif report.activeSpecificity then
-        -- The applied outfit is eligible too, so the matching rules held and only the pick
-        -- differs. Blizzard says ties are broken at random; what this run can say is whether
-        -- the outfits were tied under our specificity count.
-        if report.activeSpecificity == report.predictedSpecificity then
-            self.api:Print(
-                string.format(
-                    "|cffffcc00Tie: both are eligible with %d constrained categories - Blizzard picks among equals at random.|r",
-                    report.activeSpecificity
-                )
-            )
-        else
-            self.api:Print(
-                string.format(
-                    "|cffff5555Tiebreak disagrees: Blizzard applied an eligible outfit constraining %d categories over one constraining %d. Evidence against ranking by specificity.|r",
-                    report.activeSpecificity,
-                    tonumber(report.predictedSpecificity) or 0
-                )
-            )
-        end
     else
-        self.api:Print("|cffff5555Prediction disagrees - the outfit Blizzard applied does not match our rules.|r")
+        -- The one outcome that indicts the rules: the outfit Blizzard applied is recorded and
+        -- current, yet we say it does not fit the situation.
+        self.api:Print("|cffff5555Disagrees - the outfit Blizzard applied does not match our rules.|r")
+        self.api:Print("The pick only changes when a situation does, so if one changed since, trigger it again first.")
     end
 
     self.api:Print(

@@ -14,7 +14,8 @@ system (Retail has no weather API) the value is reported as unavailable rather t
 - A movable standalone panel with the same values, for use outside the transmog window.
 - Chat commands to inspect values, options and raw ids.
 - Experimental: a client-side reconstruction of which outfits are eligible right now, with a
-  command that scores the prediction against the outfit Blizzard actually applied.
+  command that checks the outfit Blizzard actually applied is one of them (Blizzard picks among
+  eligible outfits at random).
 
 ## Slash commands
 
@@ -25,7 +26,7 @@ system (Retail has no weather API) the value is reported as unavailable rather t
 | `/bs` | Current value of every situation trigger |
 | `/bs panel` | Toggle the standalone panel |
 | `/bs eligible` | Outfits matching the current situation (experimental) |
-| `/bs verify` | Compare the prediction against the outfit Blizzard applied |
+| `/bs verify` | Check that the outfit Blizzard applied is one of the eligible ones |
 | `/bs scan` | Record every outfit's situations; transmog window must be open |
 | `/bs list` | Trigger options for the viewed outfit, with the live value marked |
 | `/bs dump` | Raw option ids and player state, for diagnosing mismatches |

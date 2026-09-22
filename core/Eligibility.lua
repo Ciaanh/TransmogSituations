@@ -2,9 +2,10 @@ local _, ns = ...
 
 -- Phase 4, part two: which outfits match the situation the player is in right now.
 --
--- This is a prediction. Blizzard resolves the real answer server-side and reports it through
--- GetActiveOutfitID, so every prediction can be checked against the truth -- see Verify().
--- Treat a disagreement as a fact about the rules we have not learned yet, not as noise.
+-- This is a reconstruction. Blizzard resolves the real answer server-side and reports it
+-- through GetActiveOutfitID, so the rules can be checked against the truth -- see Verify().
+-- Blizzard picks at random among the eligible outfits, so the check is whether its pick is
+-- one of ours. Treat a disagreement as a fact about rules we have not learned, not as noise.
 
 local Eligibility = {}
 ns.Eligibility = Eligibility
@@ -91,9 +92,13 @@ function Eligibility:Match(outfitID, current, info)
     return true, nil, matched, unconstrained
 end
 
--- All matching outfits, most specific first. Specificity is the number of categories the
--- outfit pins to a real value -- wildcards do not count, since "All Weather" says nothing.
--- An outfit pinned to Raids beats one that matches everything.
+-- All matching outfits, in the outfit list's order. They are not ranked: Blizzard treats every
+-- eligible outfit as equal and picks one at random. Its own Situations tab says "If multiple
+-- outfits are equally valid, one will be chosen randomly", and the Retail tiebreak run
+-- (2026-09-23) confirmed that "equally valid" means *every* match -- five re-picks with three
+-- outfits eligible, constraining 3, 2 and 1 categories, landed on all three. Ranking by
+-- specificity, as this used to, was wrong. `specificity` is kept on each entry as a plain count
+-- of the categories the outfit pins, for display only.
 function Eligibility:GetEligible()
     local current = self:GetCurrentKeys()
     local eligible, rejected = {}, {}
@@ -133,9 +138,6 @@ function Eligibility:GetEligible()
     table.sort(
         eligible,
         function(a, b)
-            if a.specificity ~= b.specificity then
-                return a.specificity > b.specificity
-            end
             return (a.index or 0) < (b.index or 0)
         end
     )
@@ -143,26 +145,23 @@ function Eligibility:GetEligible()
     return eligible, rejected, current
 end
 
--- The single outfit we would predict, or nil when nothing matches.
-function Eligibility:Predict()
-    local eligible = self:GetEligible()
-    return eligible[1], eligible
-end
-
--- Compare the prediction against the outfit Blizzard actually applied. This is the whole
--- point of the exercise: the rules are reverse-engineered, so they have to be scored.
+-- Score the matching rules against the outfit Blizzard actually applied. With a random pick
+-- among equals there is no single outfit to predict, so the test is membership: the rules
+-- hold when the applied outfit is one of the eligible ones. The pick is also sticky -- no
+-- situation change, no re-pick, and /reload keeps it (Retail, 2026-09-23) -- so a verify taken
+-- long after the last trigger scores the pick made then, against the rules as they are now.
 function Eligibility:Verify()
     local okActive, activeOutfitID = ns.Util.SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
     if not okActive then
         return nil
     end
 
-    local predicted, eligible = self:Predict()
+    local eligible = self:GetEligible()
 
-    -- A prediction can only be scored against an outfit we could have predicted. While the
+    -- The applied outfit can only be scored if we could have matched it. While the
     -- active outfit has no usable cache entry (never viewed, or changed since), Match rejects
-    -- it out of hand, the prediction is forced to something else -- usually nothing -- and the
-    -- resulting disagreement says nothing whatever about the matching rules. Report the
+    -- it out of hand, so it can never be among the eligible, and the resulting disagreement
+    -- says nothing whatever about the matching rules. Report the
     -- difference so a gap in the cache is never read as evidence against the matcher.
     local activeRecorded = false
     if type(activeOutfitID) == "number" and activeOutfitID ~= 0 and ns.OutfitCache:Get(activeOutfitID) then
@@ -176,23 +175,21 @@ function Eligibility:Verify()
         activeRecorded = not ns.OutfitCache:IsStale(activeOutfitID, activeInfo)
     end
 
-    -- Blizzard's own Situations tab says "If multiple outfits are equally valid, one will be
-    -- chosen randomly." So a miss where the applied outfit is itself eligible is a question
-    -- about the tiebreak, not the matching rules, and the two must be reported apart.
-    local activeEligible = nil
+    local activeEligible = false
     for _, entry in ipairs(eligible) do
         if entry.outfitID == activeOutfitID then
-            activeEligible = entry
+            activeEligible = true
         end
     end
+
+    -- No outfit applied and none eligible is agreement too.
+    local noneApplied = type(activeOutfitID) ~= "number" or activeOutfitID == 0
 
     return {
         activeOutfitID = activeOutfitID,
         activeRecorded = activeRecorded,
-        activeSpecificity = activeEligible and activeEligible.specificity or nil,
-        predictedOutfitID = predicted and predicted.outfitID or nil,
-        predictedSpecificity = predicted and predicted.specificity or nil,
-        agrees = (predicted and predicted.outfitID or nil) == activeOutfitID,
+        activeEligible = activeEligible,
+        agrees = activeEligible or (noneApplied and #eligible == 0),
         eligible = eligible,
         recorded = ns.OutfitCache:Count(),
         unrecorded = #ns.OutfitCache:GetUnrecordedOutfits()
