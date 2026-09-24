@@ -1,5 +1,5 @@
 ---@diagnostic disable: undefined-global, lowercase-global
--- Replays the /bs dump captured on Retail on 2026-09-22 on a mage with saved talent loadouts,
+-- Replays the /ts dump captured on Retail on 2026-09-22 on a mage with saved talent loadouts,
 -- transmog window open and "Home" (id 4) viewed. This is the capture that showed the
 -- Specializations category lists one option PER SAVED LOADOUT (specID + loadoutID) next to the
 -- per-spec option (specID + loadoutID 0), overturning the earlier "per-spec only" conclusion

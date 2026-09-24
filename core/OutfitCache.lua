@@ -25,7 +25,7 @@ local OutfitCache = {}
 ns.OutfitCache = OutfitCache
 
 -- The viewed outfit's assignment for one option, the way Blizzard reads it. Returns the
--- boolean plus which source answered, so /bs dump can show both side by side.
+-- boolean plus which source answered, so /ts dump can show both side by side.
 function OutfitCache.IsAssigned(optionData)
     if not optionData or not optionData.option then
         return false, "none"
@@ -65,7 +65,7 @@ end
 local STORE_VERSION = 2
 
 function OutfitCache:GetStore(create)
-    local db = ns.BetterSituation and ns.BetterSituation.db
+    local db = ns.TransmogSituations and ns.TransmogSituations.db
     local key = ns.Util.CharacterKey()
     if not db or not key then
         return nil
@@ -163,7 +163,7 @@ end
 -- outfit is viewed, so an edit committed without a later recording -- Defaults + Apply, then
 -- clicking straight to another outfit -- leaves it describing assignments the outfit no longer
 -- has. Confirmed in game on Forever (2026-09-22): "hoo" was reset to all wildcards, the cache
--- still held Rest Area + Unmounted, and /bs verify predicted hoo over the real active outfit.
+-- still held Rest Area + Unmounted, and /ts verify predicted hoo over the real active outfit.
 --
 -- GetOutfitsInfo's situationCategories names exactly the categories with a non-wildcard
 -- selection (confirmed on both clients), so it is a free check on every entry. The names are
@@ -288,7 +288,7 @@ function OutfitCache:Prune(outfits)
 end
 
 -- Outfits the client knows about that we have no usable entry for: never viewed, or changed
--- since they were (IsStale). /bs scan re-records whatever this returns.
+-- since they were (IsStale). /ts scan re-records whatever this returns.
 function OutfitCache:GetUnrecordedOutfits()
     local missing = {}
 

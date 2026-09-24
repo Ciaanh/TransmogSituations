@@ -32,7 +32,7 @@ Triggers.UI_TRIGGER = UI_TRIGGER
 -- The last two are about content rather than composition: each option carries a `value`
 -- flag saying whether it is assigned to the *currently viewed* outfit, and that flag is
 -- baked into the tree we cache. Blizzard refetches the whole tree on these, so we must too,
--- or /bs list keeps reporting the previous outfit's assignments.
+-- or /ts list keeps reporting the previous outfit's assignments.
 Triggers.CATEGORY_EVENTS = {
     "EQUIPMENT_SETS_CHANGED",
     "PLAYER_SPECIALIZATION_CHANGED",
@@ -54,7 +54,7 @@ Triggers.STATE_UNKNOWN = STATE_UNKNOWN
 -- Enum.TransmogSituation / the generated API docs, which say LocationHouse=4 and
 -- TimeNight=31; the real numbering is a permutation on a different base.
 --
--- Captured with /bs dump on both targets. Every option present on both carries the SAME id
+-- Captured with /ts dump on both targets. Every option present on both carries the SAME id
 -- on both, so the id is the stable identity. What varies is which options exist at all:
 -- Forever has no House (7) and no Delves (6). That rules out identifying an option by its
 -- position in the category -- position 5 is "World" on Retail but "Dungeons" on Forever.
@@ -245,7 +245,7 @@ end
 function Triggers:RememberAppliedSet(setID)
     self.lastAppliedSetID = setID
 
-    local db = ns.BetterSituation and ns.BetterSituation.db
+    local db = ns.TransmogSituations and ns.TransmogSituations.db
     local key = ns.Util.CharacterKey()
     if not db or not key then
         return
@@ -276,7 +276,7 @@ function Triggers:GetLastAppliedSetID()
         return self.lastAppliedSetID
     end
 
-    local db = ns.BetterSituation and ns.BetterSituation.db
+    local db = ns.TransmogSituations and ns.TransmogSituations.db
     local key = ns.Util.CharacterKey()
     if db and key and db.lastAppliedSet then
         self.lastAppliedSetID = db.lastAppliedSet[key]
@@ -430,7 +430,7 @@ resolvers[UI_TRIGGER.Specialization] = {
         -- the per-spec option (specID + loadoutID 0). Blizzard's talent frame identifies the
         -- current one with GetLastSelectedSavedConfigID(specID); nil means no saved loadout is
         -- selected (fresh character, or the starter build). Whether Blizzard still counts a
-        -- loadout that has unsaved changes is unknown -- /bs verify will tell.
+        -- loadout that has unsaved changes is unknown -- /ts verify will tell.
         local loadoutID = nil
         if ns.Capabilities.hasTalentLoadouts then
             local okLoadout, configID = SafeCall(C_ClassTalents.GetLastSelectedSavedConfigID, specID)

@@ -1,13 +1,13 @@
 local _, ns = ...
 
--- Phase 3: the same trigger values as /bs, in a frame that works anywhere, rather than only
+-- Phase 3: the same trigger values as /ts, in a frame that works anywhere, rather than only
 -- inside Blizzard's transmog window. Reads ns.Triggers like every other consumer, so it
 -- tracks the conditional categories and the two clients' differences for free.
 
 local StatusPanel = {}
 ns.StatusPanel = StatusPanel
 
-local PANEL_NAME = "BetterSituationStatusPanel"
+local PANEL_NAME = "TransmogSituationsStatusPanel"
 local WIDTH, ROW_HEIGHT, PADDING, HEADER = 260, 16, 12, 28
 
 -- Two columns that never overlap: labels get the width of the widest one (capped, so a very long
@@ -24,7 +24,7 @@ local function TextWidth(fontString)
 end
 
 local function EnsureSaved()
-    local db = ns.BetterSituation and ns.BetterSituation.db
+    local db = ns.TransmogSituations and ns.TransmogSituations.db
     if not db then
         return nil
     end
@@ -86,7 +86,7 @@ function StatusPanel:Create()
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", PADDING, -PADDING)
-    title:SetText("BetterSituation")
+    title:SetText("TransmogSituations")
     frame.Title = title
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
@@ -209,9 +209,9 @@ function StatusPanel:Refresh()
     end
 
     if count == 0 then
-        self.frame.Title:SetText("BetterSituation - no situations")
+        self.frame.Title:SetText("TransmogSituations - no situations")
     else
-        self.frame.Title:SetText("BetterSituation")
+        self.frame.Title:SetText("TransmogSituations")
     end
 
     self:Layout(count)

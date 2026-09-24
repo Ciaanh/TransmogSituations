@@ -2,26 +2,26 @@ local addonName, ns = ...
 
 -- SavedVariables are loaded after this file runs and before ADDON_LOADED, so the table assigned
 -- here is only a placeholder; the bootstrap below re-reads the global.
-BetterSituationDB = BetterSituationDB or {}
+TransmogSituationsDB = TransmogSituationsDB or {}
 
-local BetterSituation = {}
-ns.BetterSituation = BetterSituation
-BetterSituation.db = BetterSituationDB
+local TransmogSituations = {}
+ns.TransmogSituations = TransmogSituations
+TransmogSituations.db = TransmogSituationsDB
 
 -- The addon's only way to write to chat.
 function ns.Print(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99BetterSituation|r: " .. tostring(msg))
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99TransmogSituations|r: " .. tostring(msg))
 end
 
 local function EnsureDefaults()
-    if BetterSituationDB.debug == nil then
-        BetterSituationDB.debug = false
+    if TransmogSituationsDB.debug == nil then
+        TransmogSituationsDB.debug = false
     end
 
-    BetterSituation.db = BetterSituationDB
+    TransmogSituations.db = TransmogSituationsDB
 end
 
--- One table drives both the dispatch and /bs help, so the two cannot drift apart.
+-- One table drives both the dispatch and /ts help, so the two cannot drift apart.
 local COMMANDS
 COMMANDS = {
     { "", "Current value of every situation trigger", function() ns.Diagnostics:PrintEnvironmentSnapshot() end },
@@ -35,8 +35,8 @@ COMMANDS = {
         "debug",
         "Toggle extra output",
         function()
-            BetterSituationDB.debug = not BetterSituationDB.debug
-            ns.Print("Debug output " .. (BetterSituationDB.debug and "enabled" or "disabled"))
+            TransmogSituationsDB.debug = not TransmogSituationsDB.debug
+            ns.Print("Debug output " .. (TransmogSituationsDB.debug and "enabled" or "disabled"))
         end
     },
     {
@@ -45,7 +45,7 @@ COMMANDS = {
         function()
             ns.Print("Commands:")
             for _, command in ipairs(COMMANDS) do
-                ns.Print(string.format("  /bs %-9s - %s", command[1], command[2]))
+                ns.Print(string.format("  /ts %-9s - %s", command[1], command[2]))
             end
         end
     }
@@ -61,7 +61,7 @@ local function HandleSlashCommand(input)
         end
     end
 
-    ns.Print("Unknown command. Use /bs help")
+    ns.Print("Unknown command. Use /ts help")
 end
 
 local frame = CreateFrame("Frame")
@@ -75,9 +75,9 @@ frame:SetScript(
 
         EnsureDefaults()
 
-        SLASH_BETTERSITUATION1 = "/bs"
-        SLASH_BETTERSITUATION2 = "/bettersituation"
-        SlashCmdList.BETTERSITUATION = HandleSlashCommand
+        SLASH_TRANSMOGSITUATIONS1 = "/ts"
+        SLASH_TRANSMOGSITUATIONS2 = "/transmogsituations"
+        SlashCmdList.TRANSMOGSITUATIONS = HandleSlashCommand
 
         -- Capabilities first: every other module asks it what this client supports.
         ns.Capabilities:Init()
@@ -86,7 +86,7 @@ frame:SetScript(
         ns.StatusPanel:Init()
         ns.SituationPanel:Init()
 
-        if BetterSituationDB.debug then
+        if TransmogSituationsDB.debug then
             ns.Print(
                 string.format(
                     "Loaded %s (situations=%s, weather=%s)",

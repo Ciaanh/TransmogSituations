@@ -1,5 +1,5 @@
 ---@diagnostic disable: undefined-global, lowercase-global
--- /bs list marks the current and also-active options from the resolver's own answer, never
+-- /ts list marks the current and also-active options from the resolver's own answer, never
 -- from a second copy of the matching logic. Retail tree, inside a house while resting: House
 -- is current and Rest Area is only also active.
 local H = dofile((arg[1] or ".") .. "/docs/tests/harness.lua")
@@ -24,7 +24,7 @@ local function Marked(name, marker)
     return false
 end
 
-H.Section("/bs list marking")
+H.Section("/ts list marking")
 H.Check("House [current]", Marked("House", "[current]"), true)
 H.Check("Rest Area [also active]", Marked("Rest Area", "[also active]"), true)
 H.Check("Ground Mount [current]", Marked("Ground Mount", "[current]"), true)

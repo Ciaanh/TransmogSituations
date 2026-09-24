@@ -1,5 +1,5 @@
 ---@diagnostic disable: undefined-global, lowercase-global
--- Replays the /bs dump captured on the Forever beta. Locations here is MISSING House (7) and
+-- Replays the /ts dump captured on the Forever beta. Locations here is MISSING House (7) and
 -- Delves (6), which is what rules out identifying options by position.
 local H = dofile((arg[1] or ".") .. "/docs/tests/harness.lua")
 

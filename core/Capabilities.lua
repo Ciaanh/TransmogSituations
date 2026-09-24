@@ -18,7 +18,7 @@ function Capabilities:Init()
     self.hasDelves = type(C_DelvesUI) == "table" and type(C_DelvesUI.HasActiveDelve) == "function"
 
     -- Player housing. Note C_Housing (and C_DelvesUI) exist on Forever too -- confirmed by
-    -- /bs dump -- even though that client offers neither the House nor the Delves option. The
+    -- /ts dump -- even though that client offers neither the House nor the Delves option. The
     -- API being present says nothing about the option; only the category tree does.
     self.hasHousing = type(C_Housing) == "table" and type(C_Housing.IsInsideHouse) == "function"
 

@@ -46,7 +46,7 @@ for _, scenario in ipairs(SCENARIOS) do
     H.sets = sets
     H.specAssignedSet = scenario.specSet
     ns.Triggers.lastAppliedSetID = nil
-    ns.BetterSituation.db.lastAppliedSet = nil
+    ns.TransmogSituations.db.lastAppliedSet = nil
     if scenario.applied then
         ns.Triggers:RememberAppliedSet(scenario.applied) -- as EQUIPMENT_SWAP_FINISHED would
     end

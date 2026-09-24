@@ -1,7 +1,7 @@
 ---@diagnostic disable: undefined-global, lowercase-global
 -- Phase 4: the outfit cache and the eligibility matcher.
 --
--- This proves the rules behave as designed, NOT that they are Blizzard's. /bs verify is what
+-- This proves the rules behave as designed, NOT that they are Blizzard's. /ts verify is what
 -- scores them against reality.
 local H = dofile((arg[1] or ".") .. "/docs/tests/harness.lua")
 
@@ -117,7 +117,7 @@ H.Check("situations off is not scored", report.verdict, "disabled")
 H.Check("and is not an agreement", report.agrees, false)
 H.ClearChat()
 ns.Diagnostics:PrintEligible()
-H.Check("/bs eligible says situations are off", H.ChatText():find("switched off", 1, true) ~= nil, true)
+H.Check("/ts eligible says situations are off", H.ChatText():find("switched off", 1, true) ~= nil, true)
 H.situationsEnabled = true
 
 -- Nothing applied while outfits are eligible: a moment without a pick, not a cache gap.
@@ -160,7 +160,7 @@ rest.situationCategories = { "Locations" }
 H.Check("agreeing entry is not stale", ns.OutfitCache:IsStale(3, rest), false)
 rest.situationCategories = nil
 
--- /bs scan steps the viewed outfit through every unrecorded one, then restores the original.
+-- /ts scan steps the viewed outfit through every unrecorded one, then restores the original.
 H.Section("scan")
 H.Check("refuses without the transmog window", ns.OutfitCache:Scan(), false)
 TransmogFrame = { IsShown = function() return true end }

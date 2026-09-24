@@ -1,5 +1,5 @@
 ---@diagnostic disable: undefined-global, lowercase-global
--- Replays the /bs dump captured on live Retail: real situationIDs, real option names and
+-- Replays the /ts dump captured on live Retail: real situationIDs, real option names and
 -- order, real player state. A Dracthyr in visage, outdoors in a neighborhood while resting, on
 -- a ground mount, no C_Weather.
 local H = dofile((arg[1] or ".") .. "/docs/tests/harness.lua")
@@ -45,23 +45,23 @@ local inside = ns.Triggers:Resolve(3)
 H.Check("value", inside.optionName, "House")
 H.Check("also active", H.AlsoNames(inside), "Rest Area")
 
-H.Section("/bs renders without error")
+H.Section("/ts renders without error")
 H.ClearChat()
 ns.Diagnostics:PrintEnvironmentSnapshot()
 H.Check("prints the Locations line", H.ChatText():find("Locations: House", 1, true) ~= nil, true)
 
 H.Section("slash commands")
 H.ClearChat()
-SlashCmdList.BETTERSITUATION("help")
+SlashCmdList.TRANSMOGSITUATIONS("help")
 local help = H.ChatText()
 for _, name in ipairs({ "panel", "eligible", "verify", "scan", "list", "dump", "debug", "help" }) do
-    H.Check("/bs help lists " .. name, help:find("/bs " .. name, 1, true) ~= nil, true)
+    H.Check("/ts help lists " .. name, help:find("/ts " .. name, 1, true) ~= nil, true)
 end
 H.ClearChat()
-SlashCmdList.BETTERSITUATION("nonsense")
+SlashCmdList.TRANSMOGSITUATIONS("nonsense")
 H.Check("an unknown command says so", H.ChatText():find("Unknown command", 1, true) ~= nil, true)
 H.ClearChat()
-SlashCmdList.BETTERSITUATION("  VERIFY  ")
+SlashCmdList.TRANSMOGSITUATIONS("  VERIFY  ")
 H.Check("commands are trimmed and case-insensitive", H.ChatText():find("Blizzard applied", 1, true) ~= nil, true)
 
 H.Done()

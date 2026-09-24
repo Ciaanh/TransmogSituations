@@ -14,7 +14,7 @@ local UNKNOWN_TEXT = "|cffffcc00?|r"
 
 -- The one rendering of a resolved value, at three levels of detail:
 --   "value"   the Situations tab row: the value alone. No reason, no markers -- a decision,
---             not an oversight (the row has no room, and /bs is where detail lives).
+--             not an oversight (the row has no room, and /ts is where detail lives).
 --   "compact" the standalone panel: adds "+N" for the other options true right now and "~"
 --             when the value is approximate or ambiguous.
 --   "full"    chat: everything, with inline colour codes.
@@ -500,10 +500,10 @@ function Diagnostics:PrintEligible()
                 string.format("  |cffffcc00%s (#%s) - %s|r", tostring(entry.name), tostring(entry.index), entry.reason)
             )
         end
-        ns.Print("Open the transmog Situations tab and click through them, or use /bs scan.")
+        ns.Print("Open the transmog Situations tab and click through them, or use /ts scan.")
     end
 
-    if ns.BetterSituation.db.debug and #rejected > 0 then
+    if ns.TransmogSituations.db.debug and #rejected > 0 then
         ns.Print("Rejected:")
         for _, entry in ipairs(rejected) do
             ns.Print(string.format("  |cff808080%s - %s|r", tostring(entry.name), tostring(entry.reason)))
@@ -570,7 +570,7 @@ function Diagnostics:PrintVerify()
                 self:DescribeOutfit(report.activeOutfitID, outfitsByID)
             )
         )
-        ns.Print("Open the transmog Situations tab and click through your outfits, or use /bs scan, then try again.")
+        ns.Print("Open the transmog Situations tab and click through your outfits, or use /ts scan, then try again.")
     else
         -- The one outcome that indicts the rules: the outfit Blizzard applied is recorded and
         -- current, yet we say it does not fit the situation.

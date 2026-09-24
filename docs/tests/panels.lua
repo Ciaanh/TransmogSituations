@@ -35,7 +35,7 @@ local situationsFrame = BuildSituationsFrame()
 
 local ns = H.Load()
 
-local function RowText(i) return rows[i].BetterSituationValue:GetText() end
+local function RowText(i) return rows[i].TransmogSituationsValue:GetText() end
 
 H.Section("Situations tab: the value alone")
 H.Check("attached at load", ns.SituationPanel.attached, true)
@@ -43,7 +43,7 @@ situationsFrame:Show()
 H.Check("Locations shows the value, no markers", RowText(1), "House")
 H.Check("Movement", RowText(2), "Ground Mount")
 H.Check("an unsupported trigger says n/a", RowText(3), "n/a")
-H.Check("a placeholder is greyed", rows[3].BetterSituationValue.color[1], 0.5)
+H.Check("a placeholder is greyed", rows[3].TransmogSituationsValue.color[1], 0.5)
 H.Check("polls while shown (Movement has no event)", H.LiveTickers(), 1)
 
 H.Section("Situations tab: live")
@@ -66,7 +66,7 @@ local panelRows = ns.StatusPanel.frame.rows
 H.Check("Locations shows the other true option as +N", panelRows[1].value:GetText(), "House +1")
 H.Check("Movement", panelRows[2].value:GetText(), "Ground Mount")
 H.Check("one row per category", #panelRows, #H.categories)
-H.Check("remembers it is shown", ns.BetterSituation.db.panel.shown, true)
+H.Check("remembers it is shown", ns.TransmogSituations.db.panel.shown, true)
 H.W.mounted = false
 H.Fire("PLAYER_MOUNT_DISPLAY_CHANGED")
 H.Check("follows a dismount", panelRows[2].value:GetText(), "Unmounted")
@@ -83,7 +83,7 @@ H.Fire("UNIT_FORM_CHANGED", "player")
 H.Check("follows the player's", formsRow.value:GetText(), "Visage")
 
 ns.StatusPanel.frame:Hide() -- as Escape would, without going through our Hide()
-H.Check("remembers it was closed", ns.BetterSituation.db.panel.shown, false)
+H.Check("remembers it was closed", ns.TransmogSituations.db.panel.shown, false)
 H.Check("and stops polling", H.LiveTickers(), 0)
 
 -- Labels and values sit in two columns that never overlap, whatever the locale. The harness

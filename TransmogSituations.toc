@@ -1,9 +1,9 @@
 ## Interface: 120100, 16001
-## Title: BetterSituation
+## Title: TransmogSituations
 ## Notes: Tracks transmog situation criteria
 ## Author: Ciaanh
 ## Version: 0.2.0
-## SavedVariables: BetterSituationDB
+## SavedVariables: TransmogSituationsDB
 
 core\Util.lua
 core\Capabilities.lua
@@ -13,4 +13,4 @@ core\Eligibility.lua
 core\Diagnostics.lua
 core\StatusPanel.lua
 core\SituationPanel.lua
-BetterSituation.lua
+TransmogSituations.lua

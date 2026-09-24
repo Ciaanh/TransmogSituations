@@ -4,19 +4,19 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-**BetterSituation** — a World of Warcraft addon targeting the **WoW Forever beta** (a Classic
+**TransmogSituations** — a World of Warcraft addon targeting the **WoW Forever beta** (a Classic
 client running the modern retail UI). It surfaces the *live values* of transmog "situation"
 triggers, which Blizzard's own Situations tab configures but never displays.
 
 Goals, in order:
 1. Show current situation-trigger values on the transmog **Situations tab**
    (`SituationsFrame`, `TransmogWardrobeSituationsMixin`).
-2. Provide `/bs` (`/bettersituation`) to read those values from chat at any time.
+2. Provide `/ts` (`/transmogsituations`) to read those values from chat at any time.
 3. Resolve the **eligible transmog set** from the current trigger values, client-side.
 
 All four phases of `docs/ROADMAP.md` are implemented. Phases 0–2 have run in game on both
 clients. Phases 3 and 4 (standalone panel, outfit cache, eligibility) have run **in part**: the
-passive cache and `/bs scan` work on both clients, `/bs verify` has agreed on both, the panel
+passive cache and `/ts scan` work on both clients, `/ts verify` has agreed on both, the panel
 renders and updates live. Much is still unverified (panel persistence, recording on Apply, most
 Location / Movement / Weather values). The roadmap's "In-game checks still outstanding" list is
 the current to-do.
@@ -35,7 +35,7 @@ too. Confirmed divergences:
 | House option (7) in Locations | **no** | yes | Locations has 8 options on Forever, 10 on Retail |
 | Delves option (6) in Locations | **no** | yes | same |
 
-`C_Housing` and `C_DelvesUI` **exist on both** clients (confirmed by `/bs dump`), so a
+`C_Housing` and `C_DelvesUI` **exist on both** clients (confirmed by `/ts dump`), so a
 capability probe cannot tell you whether the option exists. Only the category tree can.
 
 The situation APIs the addon depends on — `GetUISituationCategoriesAndOptions`,
@@ -56,15 +56,15 @@ Practical rules:
 ## Layout
 
 ```
-BetterSituation.toc          # load order + Interface versions (120100 retail, 16001 classic)
-BetterSituation.lua          # addon namespace, SavedVariables, slash commands, ADDON_LOADED bootstrap
+TransmogSituations.toc       # load order + Interface versions (120100 retail, 16001 classic)
+TransmogSituations.lua       # addon namespace, SavedVariables, slash commands, ADDON_LOADED bootstrap
 core/Util.lua                # SafeCall / SafeCallAll / RegisterEventsSafely / CharacterKey
 core/Capabilities.lua        # one-time probe of the optional systems
 core/Triggers.lua            # THE model: situationID table, resolvers, category cache
 core/OutfitCache.lua         # per-outfit situation assignments, recorded as the player browses
 core/Eligibility.lua         # matching, Verify() against GetActiveOutfitID
-core/Diagnostics.lua         # all chat output: /bs, list, dump, eligible, verify
-core/StatusPanel.lua         # the standalone /bs panel frame
+core/Diagnostics.lua         # all chat output: /ts, list, dump, eligible, verify
+core/StatusPanel.lua         # the standalone /ts panel frame
 core/SituationPanel.lua      # inline values on Blizzard's Situations tab
 make-release.ps1             # stages + zips a release into .build/
 docs/ROADMAP.md              # phased plan + the list of in-game checks still outstanding
@@ -73,22 +73,22 @@ _refs/                       # local-only research notes (gitignored, never ship
 Situations Data.txt          # captured in-game output + enum dumps (see Domain reference)
 ```
 
-Load order is declared in `BetterSituation.toc` and matters: `Util` first (others capture its
+Load order is declared in `TransmogSituations.toc` and matters: `Util` first (others capture its
 functions at file scope), `Capabilities` before anything that probes, `Triggers` before its
 consumers, `OutfitCache` before `Diagnostics`. Adding a new file means adding it to the toc
 **and** to `$includes` in `make-release.ps1` (which ships only the listed files, so `docs/` never
 reaches the zip).
 
 Module pattern: every file does `local _, ns = ...` and assigns a table onto `ns`. A module with
-setup to do exposes `Module:Init()`, which `BetterSituation.lua` calls from its `ADDON_LOADED`
+setup to do exposes `Module:Init()`, which `TransmogSituations.lua` calls from its `ADDON_LOADED`
 handler. Chat output goes through `ns.Print(msg)`, never bare `print`. Slash commands are one
-`COMMANDS` table in `BetterSituation.lua` that drives both the dispatch and `/bs help`.
+`COMMANDS` table in `TransmogSituations.lua` that drives both the dispatch and `/ts help`.
 
 A resolved value is `{ state, situationID, optionName, option, alsoOptions, ... }`; `ResolveAll()`
 wraps each in `{ triggerID, categoryName, result }`. Options are looked up with one function,
 `Triggers:FindOption(triggerID, situationID, fields)`. The outfit list is read through
 `OutfitCache:GetOutfits()`; reports never prune the cache (that happens on
-`TRANSMOG_OUTFITS_CHANGED` and at the start of `/bs scan`, and never on an empty list).
+`TRANSMOG_OUTFITS_CHANGED` and at the start of `/ts scan`, and never on an empty list).
 
 **Everything reads `ns.Triggers`.** Chat, the tab overlay, the standalone panel and the
 eligibility matcher are four renderers over one model. A new consumer reads `ResolveAll()` or
@@ -105,7 +105,7 @@ another event frame for game events; subscribe. (The bootstrap's `ADDON_LOADED` 
 ## Build / test / release
 
 ```powershell
-.\make-release.ps1            # PowerShell 7+; reads "## Version" from the toc -> .build/BetterSituation-v<version>.zip
+.\make-release.ps1            # PowerShell 7+; reads "## Version" from the toc -> .build/TransmogSituations-v<version>.zip
 ```
 
 ```sh
@@ -114,11 +114,11 @@ another event frame for game events; subscribe. (The bootstrap's `ADDON_LOADED` 
 
 Run the suite after any change under `core/`. It loads the addon through the toc and the real
 `ADDON_LOADED` bootstrap against the stubs in `docs/tests/harness.lua`, replays four real
-`/bs dump` captures and drives every resolver branch. A new Blizzard api call needs its stub added
+`/ts dump` captures and drives every resolver branch. A new Blizzard api call needs its stub added
 to the harness, once. See `docs/tests/README.md`. It proves the mapping behaves as designed given an input; it cannot prove the game
 supplies that input, and it cannot prove the matching rules are Blizzard's. Three
 confidently-wrong mappings have shipped in this project and each was caught only by a real
-`/bs dump` in game.
+`/ts dump` in game.
 
 In-game verification: `/reload`, and `/console scriptErrors 1` when touching UI code.
 `.vscode/settings.json` configures the Lua language server for Lua 5.1 with the ketho WoW API
@@ -163,7 +163,7 @@ namespace.
 
 ### `option.situationID` is NOT an `Enum.TransmogSituation` value
 
-Captured with `/bs dump` on both targets. The real ids are a permutation on a different base,
+Captured with `/ts dump` on both targets. The real ids are a permutation on a different base,
 and they are **identical on Retail and Forever** for every option both clients offer:
 
 ```
@@ -230,7 +230,7 @@ there.
 **There is no ranking.** When several outfits are eligible Blizzard picks one at random, however
 many categories each constrains (Retail, 2026-09-23: Frost/Mount/Ceremony constraining 3/2/1 were
 all picked across five re-picks). The pick happens only on a situation change and survives
-`/reload`. So `/bs verify` scores *membership* — is `GetActiveOutfitID()` among the eligible — and
+`/reload`. So `/ts verify` scores *membership* — is `GetActiveOutfitID()` among the eligible — and
 never a single predicted outfit. Do not reintroduce specificity ranking; `specificity` on an
 eligible entry is a display count only.
 
@@ -238,7 +238,7 @@ eligible entry is a display count only.
 switched off), `"none-applied"` (no pick made yet) and `"not-recorded"` (cache gap) mean the run
 cannot score anything; never report those as a rules failure.
 
-`/bs scan` switches the viewed outfit, which discards unapplied edits. It refuses while
+`/ts scan` switches the viewed outfit, which discards unapplied edits. It refuses while
 `HasPendingOutfitTransmogs()` / `HasPendingOutfitSituations()` or `InTransmogEvent()` is true,
 and stops between steps if the window closes or an edit starts — Blizzard's own outfit list asks
 before switching for the same reason.
@@ -259,13 +259,15 @@ before switching for the same reason.
 - **Formatting lives in `Diagnostics`.** `Diagnostics:FormatValue(result, detail)` is the only
   rendering of a value: `"value"` for the tab row, `"compact"` for the panel (`+N`, `~`), `"full"`
   for chat. The inline row on the Situations tab shows only the value (no reason, no markers, no
-  tooltip) — a decision, not an oversight. `/bs` is where detail lives.
+  tooltip) — a decision, not an oversight. `/ts` is where detail lives.
 - **Forever beta does not reliably persist SavedVariables** across `/reload` or logout (known
   client bug). On Forever, anything stored — the outfit cache, `lastAppliedSet`, panel state — may
-  be gone next session; `/bs scan` rebuilds the cache. Verify persistence on Retail, and never read
+  be gone next session; `/ts scan` rebuilds the cache. Verify persistence on Retail, and never read
   an empty cache on Forever as an addon bug without checking the `WTF/.../SavedVariables` file.
-- SavedVariables is the single global `BetterSituationDB`: `debug`, `panel` (position, shown),
+- SavedVariables is the single global `TransmogSituationsDB`: `debug`, `panel` (position, shown),
   `lastAppliedSet[charKey]`, `outfitSituations[charKey][outfitID]`. Character-scoped data is keyed
   by `ns.Util.CharacterKey()`.
+- The addon was called **BetterSituation** (slash `/bs`, SavedVariables `BetterSituationDB`) until
+  just before its first release; the captures in `Situations Data.txt` still show that prefix.
 - `Situations Data.txt` holds raw in-game dumps (including a French-client run that demonstrates
   the localization problem) plus the generated enum tables.

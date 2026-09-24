@@ -390,16 +390,16 @@ DEFAULT_CHAT_FRAME = { AddMessage = function(_, msg) table.insert(H.chat, msg) e
 -- ADDON_LOADED, which runs every module's Init through the real bootstrap.
 function H.Load()
     local ns = {}
-    for line in io.lines(H.ROOT .. "/BetterSituation.toc") do
+    for line in io.lines(H.ROOT .. "/TransmogSituations.toc") do
         line = line:gsub("%s+$", "")
         if line ~= "" and not line:match("^##") then
             local path = H.ROOT .. "/" .. line:gsub("\\", "/")
             local chunk = assert(loadfile(path))
-            chunk("BetterSituation", ns)
+            chunk("TransmogSituations", ns)
         end
     end
     H.ns = ns
-    H.Fire("ADDON_LOADED", "BetterSituation")
+    H.Fire("ADDON_LOADED", "TransmogSituations")
     return ns
 end
 

@@ -1,5 +1,5 @@
 ---@diagnostic disable: undefined-global, lowercase-global
--- Replays the /bs dump captured on the Forever beta on 2026-09-22 with the transmog window
+-- Replays the /ts dump captured on the Forever beta on 2026-09-22 with the transmog window
 -- open and "Outfit 2" (id 3) viewed. This is the capture that settled how an assignment is
 -- read: GetOutfitSituation answered true for every "All" option while the option tree's
 -- `value` flag was false on every option. It also carries a real Equipment Sets category with

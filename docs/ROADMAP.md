@@ -1,4 +1,4 @@
-# BetterSituation — implementation plan
+# TransmogSituations — implementation plan
 
 Living plan for the addon's evolution. Phases are ordered by dependency: Phase 1 produces the
 trigger model that Phases 2, 3 and 4 all consume. Phase 0 is a blocker.
@@ -28,7 +28,7 @@ total failure.
    `hasSituations`, `hasDelves`. Everything downstream asks the probe instead of re-testing globals
    ad hoc.
 
-**Verify:** load on Retail with `/console scriptErrors 1` — no Lua error, `/bs` prints every line
+**Verify:** load on Retail with `/console scriptErrors 1` — no Lua error, `/ts` prints every line
 with Weather marked unsupported.
 
 ---
@@ -69,7 +69,7 @@ Rules:
 | Weather | `C_Weather.GetCurrentWeather()` → Clear/Rain/Snow/Sandstorm | `Enum.WeatherType.Miscellaneous` (4) has **no** `TransmogSituation` counterpart — decide whether it degrades to Clear or reports unknown. Unsupported on Retail. |
 | Time of Day | `GetGameTime()` hour → Morning / Day / Evening / Night | Thresholds in the current code are **invented** (6/12/17/21) and the labels don't match the enum. Derive the real boundaries empirically by sampling, then hardcode with a comment recording how they were found. |
 
-**Verify:** `/bs` prints, per category the client actually offers, the resolved option name plus its
+**Verify:** `/ts` prints, per category the client actually offers, the resolved option name plus its
 `situationID`. Compare each against what Blizzard's own dropdown shows as selectable.
 
 ---
@@ -86,7 +86,7 @@ between title and dropdown — so the value has to go **under the title**, ancho
 `Title`'s `BOTTOMLEFT` so it flows correctly when a title wraps to two lines.
 
 1. Attach lazily, once per pooled row: keep the FontString on the frame object itself
-   (`frame.BetterSituationValue`), because `SituationFramePool` reuses frames across
+   (`frame.TransmogSituationsValue`), because `SituationFramePool` reuses frames across
    `ReleaseAll()` / `Acquire()` cycles.
 2. Read `frame.elementData.triggerID` and render `ns.Triggers:Resolve(triggerID)` in a small
    font (`GameFontHighlightSmall`), greyed when the category is unsupported.
@@ -113,15 +113,15 @@ reopening, and confirm no taint when opening the dropdowns afterwards.
 All five phases are implemented and committed on `feat/situation-diagnostics`. Phases 0-2 have
 been exercised in game on both clients; **phases 3 and 4 have never been run in game at all.**
 
-Automated coverage is `./docs/tests/run.sh` — 18 checks: syntax, replays of the two real `/bs dump`
-captures, every resolver branch, the category cache, the attach lifecycle, `/bs list` marking, the
+Automated coverage is `./docs/tests/run.sh` — 18 checks: syntax, replays of the two real `/ts dump`
+captures, every resolver branch, the category cache, the attach lifecycle, `/ts list` marking, the
 eligibility matcher and eight equipment-set shapes. Run it after any change to the trigger model.
 
 What that suite can and cannot do is worth stating plainly, because it has been mistaken for more
 than once: it proves the mapping behaves as designed given an input. It does **not** prove the game
 supplies the input we assume, and it cannot prove the matching rules are Blizzard's. Three
 confidently-wrong mappings have already shipped in this project — the documented enum, ordinal
-position, and the equipment-set id-0 guard — and each was caught only by a real `/bs dump`.
+position, and the equipment-set id-0 guard — and each was caught only by a real `/ts dump`.
 
 ---
 
@@ -129,23 +129,23 @@ position, and the equipment-set id-0 guard — and each was caught only by a rea
 
 ### Phases 3 and 4 — partly verified
 
-- [ ] **`/bs panel`** renders (seen on Forever, 2026-09-22) and updates live (confirmed on Retail,
+- [ ] **`/ts panel`** renders (seen on Forever, 2026-09-22) and updates live (confirmed on Retail,
       2026-09-22). Still to check: drags, and remembers its position and shown state across `/reload`.
       The `BackdropTemplate` `pcall` fallback has never been taken.
 - [x] **The passive cache populates.** CONFIRMED on Forever, 2026-09-22: clicking through the
-      Situations tab took `/bs eligible` from "1 of 2 never viewed" to "All 2 outfits recorded",
+      Situations tab took `/ts eligible` from "1 of 2 never viewed" to "All 2 outfits recorded",
       and the recorded assignments agree with `situationCategories` (`Situations Data.txt`, last
       section). Still open: that merely *opening* the tab records the outfit already selected
       (the `StartTracking` call), and a Retail run. Originally: click through several outfits on
-      the Situations tab, then `/bs eligible` and confirm the "never viewed" count falls. Assignments are read through
+      the Situations tab, then `/ts eligible` and confirm the "never viewed" count falls. Assignments are read through
       `GetOutfitSituation(option)`, the call Blizzard's dropdown uses; if the client refuses that
       call from an addon (it is `AllowedWhenUntainted`) the cache falls back to the tree's `value`
-      flag, which has never been observed true. `/bs dump` shows both columns.
-- [ ] **`/bs verify` agrees.** The single most valuable check in this document: it scores the
+      flag, which has never been observed true. `/ts dump` shows both columns.
+- [ ] **`/ts verify` agrees.** The single most valuable check in this document: it scores the
       reverse-engineered matcher against the outfit Blizzard actually applied. Run it in several
       situations. Disagreements are where the real rule is hiding.
       It only scores anything once the **active** outfit is in the cache: until then the matcher
-      rejects it as "not recorded" before a rule is consulted, and `/bs verify` says
+      rejects it as "not recorded" before a rule is consulted, and `/ts verify` says
       "Not scored" rather than claiming the rules are wrong. Record first, then score.
       First results, Forever 2026-09-22: **two agreements** (an all-wildcard outfit alone; then
       Outfit 1 bound to equipment set "test" over two all-wildcard outfits). **One disagreement,
@@ -154,11 +154,11 @@ position, and the equipment-set id-0 guard — and each was caught only by a rea
       ways, both unverified in game: `CommitPendingSituations` is now post-hooked so an Apply is
       recorded, and an entry that contradicts the outfit's `situationCategories` is treated as
       stale (`OutfitCache:IsStale`) — not matched, counted as unrecorded, re-recorded by scan.
-      `/bs verify` now also separates "applied outfit not eligible" (rules wrong) from "applied
+      `/ts verify` now also separates "applied outfit not eligible" (rules wrong) from "applied
       outfit eligible, different pick" (tiebreak).
       Retail, 2026-09-22: **agrees** with 7 outfits recorded — Blizzard applied "Mount" (id 39),
       we predicted it. First Retail score. Second agreement after logout/login ("Frost", id 2).
-- [x] **`/bs scan`** WORKS on **both** clients, 2026-09-22 (Retail: "Scanning 6 outfit(s)... 6 recorded"). Forever: "Scanning 1 outfit(s)... Scan finished: 1 outfit(s)
+- [x] **`/ts scan`** WORKS on **both** clients, 2026-09-22 (Retail: "Scanning 6 outfit(s)... 6 recorded"). Forever: "Scanning 1 outfit(s)... Scan finished: 1 outfit(s)
       recorded", so `ChangeViewedOutfit` is honoured from an addon. The outfit it re-recorded was the
       one `IsStale` had flagged, which is also the first sign the stale check works in game. Still
       to check: the original viewed outfit is restored afterwards. It may refuse outright — `ChangeViewedOutfit` is `AllowedWhenUntainted`, so the
@@ -169,21 +169,21 @@ position, and the equipment-set id-0 guard — and each was caught only by a rea
       randomly"*, and "equally valid" means every match. With Frost (3 categories), Mount (2) and
       Ceremony (1) all eligible, five mount/dismount re-picks gave Frost, Ceremony, Frost,
       Ceremony, Mount. The pick is also **sticky**: nothing changes without a situation trigger,
-      and `/reload` keeps it. Specificity ranking was removed: `/bs eligible` lists the eligible
-      outfits in list order and marks the applied one, and `/bs verify` agrees when the applied
+      and `/reload` keeps it. Specificity ranking was removed: `/ts eligible` lists the eligible
+      outfits in list order and marks the applied one, and `/ts verify` agrees when the applied
       outfit is among them.
 - [ ] **The cache must survive a relog.** `/reload` CONFIRMED on Retail, 2026-09-22: scan, `/reload`,
-      and `/bs verify` still saw all 7 outfits. Logout/login CONFIRMED on Retail the same day: still 7
-      recorded, and `/bs verify` agreed again (Blizzard applied "Frost", id 2; we predicted it).
+      and `/ts verify` still saw all 7 outfits. Logout/login CONFIRMED on Retail the same day: still 7
+      recorded, and `/ts verify` agreed again (Blizzard applied "Frost", id 2; we predicted it).
       **Blocked on Forever, a known client bug:** The Forever
       beta does not reliably persist SavedVariables across `/reload` or logout (known beta issue,
       2026-09-22). Seen: the account file written at 23:26:41 with three outfits, rewritten at
       23:29:06 with only `debug` and `panel`. Nothing in the addon is at fault. Until Blizzard fixes
       it, on Forever the cache, `lastAppliedSet` and the panel position last one session: run
-      `/bs scan` after each login. Persistence can only be verified on Retail for now.
+      `/ts scan` after each login. Persistence can only be verified on Retail for now.
 - [ ] **Recording after Apply** (new, 2026-09-22). Edit an outfit, press Apply, and without clicking
-      another outfit run `/bs eligible`: nothing should be reported as changed. Then reset one
-      with Defaults + Apply and confirm `/bs dump` / `/bs list` show the new assignment.
+      another outfit run `/ts eligible`: nothing should be reported as changed. Then reset one
+      with Defaults + Apply and confirm `/ts dump` / `/ts list` show the new assignment.
 
 ### Phase 2 UI behaviour, still unverified
 
@@ -200,12 +200,12 @@ position, and the equipment-set id-0 guard — and each was caught only by a rea
 
 - [x] ~~Equipment Sets resolve.~~ DONE on **both** clients. Ids start at 0, the All row shares
       equipmentSetID 0 so matching needs situationID 19 as well, and 18/19 are confirmed.
-- [ ] **Last-applied fallback.** Apply a set, swap one item, confirm `/bs` still names the set with
+- [ ] **Last-applied fallback.** Apply a set, swap one item, confirm `/ts` still names the set with
       the `~` marker rather than going `?`. Then relog and confirm it survives.
-      Half done, Forever 2026-09-22: `/bs` showed `test ~ (last applied, 7/8 worn)`. Relog not yet
+      Half done, Forever 2026-09-22: `/ts` showed `test ~ (last applied, 7/8 worn)`. Relog not yet
       checked. Oddity from the same session: `test ~ (8/8 worn)` in Stormwind — every item worn yet
       `isEquipped=false`, so something other than the slot count fails the check (swimming? a
-      durability or bag state?). Needs a `/bs dump` taken at that moment.
+      durability or bag state?). Needs a `/ts dump` taken at that moment.
 - [ ] **Does Blizzard agree with the fallback?** Bind an outfit to an equipment set, apply the set,
       swap one item. If Blizzard's own situation stops matching, strict `isEquipped` is right and
       the fallback should be removed. This decides an assumption, not a bug.
@@ -228,7 +228,7 @@ unproven is that the game reports what the resolver expects.
       whether `Miscellaneous` (4) has any counterpart (open question 5). Untestable on Retail,
       which has no `C_Weather` — but the Weather *category* does exist there; only the API to read
       it is missing. So on Retail Blizzard can match an outfit bound to a specific weather while we
-      cannot, and `/bs verify` will report that as a rules disagreement.
+      cannot, and `/ts verify` will report that as a rules disagreement.
 - [ ] **Time of Day:** seen — 23:03, 00:11 and 03:30 = Night, 13:41 and 14:08 = Midday. The band boundaries are still
       invented (open question 2); Morning and Evening have never been observed.
 - [ ] **Racial Forms:** seen — Dracthyr visage. Unseen — Dracthyr dragon form, and Worgen, where the
@@ -281,31 +281,31 @@ as dead the same day and then reinstated hours later when a Retail dump showed p
 
 ### Fixed by the 2026-09-25 release review, still to confirm in game
 
-- [ ] **`/bs scan` refuses over unapplied changes.** Make an appearance or situation edit, do not
-      apply it, run `/bs scan`: it must refuse, and the edit must still be there. Same during a
+- [ ] **`/ts scan` refuses over unapplied changes.** Make an appearance or situation edit, do not
+      apply it, run `/ts scan`: it must refuse, and the edit must still be there. Same during a
       transmog event. Start a scan and close the window mid-way: it stops and says so.
-- [ ] **`/bs verify` verdicts.** Switch situations off and run it: "Not scored: situations are
+- [ ] **`/ts verify` verdicts.** Switch situations off and run it: "Not scored: situations are
       switched off". With situations on and nothing applied yet: "Not scored: no outfit is applied".
 - [ ] **Panel layout.** Two columns, the label column as wide as the widest label (capped at 150),
       values truncating with an ellipsis. Look at it in French and with a long loadout name.
       Relies on `GetUnboundedStringWidth`, falling back to `GetStringWidth`.
 - [ ] **`UNIT_FORM_CHANGED` for other units is ignored** — in a group with a Worgen or Dracthyr,
-      the panel should not refresh on their form changes (visible only with `/bs debug` or a
+      the panel should not refresh on their form changes (visible only with `/ts debug` or a
       profiler; low priority).
 
 ### Deliberately closed, do not reopen without a reason
 
 - The inline row on the Situations tab shows **only** the value: no reason, no also-active list, no
-  approximate/ambiguous marker, no tooltip. That was a decision, not an oversight. `/bs` is where
+  approximate/ambiguous marker, no tooltip. That was a decision, not an oversight. `/ts` is where
   the detail lives.
 
 ---
 
 ## Phase 3 — Standalone panel — IMPLEMENTED, partly verified in game
 
-Same data as `/bs`, in a frame, for users who don't want chat spam.
+Same data as `/ts`, in a frame, for users who don't want chat spam.
 
-1. `/bs panel` toggles it; persist shown/hidden plus position in `BetterSituationDB`.
+1. `/ts panel` toggles it; persist shown/hidden plus position in `TransmogSituationsDB`.
 2. Build it from the **same** `ns.Triggers` registry as Phase 2 — one row per category the client
    offers, so the panel automatically tracks conditional categories (Equipment Sets, Racial Forms,
    Specializations) and client differences.
@@ -340,7 +340,7 @@ So the outfit→situation mapping has to be reconstructed client-side. Three str
 | **B. Passive cache** | Record the full option map for whichever outfit the user views, into SavedVariables keyed by `outfitID` | Zero intrusion, builds up naturally, survives sessions. Incomplete until the user has visited each outfit. |
 | **C. Parse strings** | Read `situationCategories` | **Rejected** — localized and category-level. |
 
-**Recommendation: B as the default, A as an explicit opt-in** (`/bs scan`) for users who want the
+**Recommendation: B as the default, A as an explicit opt-in** (`/ts scan`) for users who want the
 table filled immediately. Entries are re-recorded on
 `VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED` and on Apply, and an entry that contradicts the
 outfit's `situationCategories` is treated as stale (`OutfitCache:IsStale`) — that replaced the
@@ -359,7 +359,7 @@ mid-edit.
 The tree is still fetched per viewed outfit and the cached copy is dropped on those events — which
 is why they are in `Triggers.CATEGORY_EVENTS`. `Triggers` is the only event listener and drops the
 cache before any subscriber (the outfit cache included) hears the event. Forgetting that once made
-`/bs list` report the previous outfit's assignments.
+`/ts list` report the previous outfit's assignments.
 
 Assignments are keyed by the `situationID:specID:loadoutID:equipmentSetID` 4-tuple
 (`OutfitCache.OptionKey`), not by `situationID` alone: spec, loadout and equipment-set options
@@ -390,9 +390,9 @@ Blizzard resolves the active outfit server-side, and `GetActiveOutfitID()` repor
 makes the whole thing self-checking, which should be built in from the start rather than bolted on:
 
 1. Every time the resolver runs, compare the prediction against `GetActiveOutfitID()`.
-2. Log mismatches (behind the existing `BetterSituationDB.debug` flag) with the full trigger
+2. Log mismatches (behind the existing `TransmogSituationsDB.debug` flag) with the full trigger
    snapshot that produced them.
-3. Ship the mismatch log as `/bs verify`. (As built, `/bs verify` is on demand only: there is no
+3. Ship the mismatch log as `/ts verify`. (As built, `/ts verify` is on demand only: there is no
    automatic comparison and no mismatch log, points 1 and 2.) The tiebreak rule and the unknowns from Phase 1
    (`LocationHouse`, time-of-day boundaries) will fall out of the collected mismatches far faster
    than from guessing.
@@ -424,10 +424,10 @@ core/Capabilities.lua  one-time probe of the optional systems (C_Weather, C_Hous
 core/Triggers.lua      THE model: situationID table, resolvers, category cache
 core/OutfitCache.lua   per-outfit situation assignments, recorded as the player browses
 core/Eligibility.lua   matching, and Verify() against GetActiveOutfitID (membership, not rank)
-core/Diagnostics.lua   all chat output: /bs, list, dump, eligible, verify
-core/StatusPanel.lua   the standalone /bs panel frame
+core/Diagnostics.lua   all chat output: /ts, list, dump, eligible, verify
+core/StatusPanel.lua   the standalone /ts panel frame
 core/SituationPanel.lua the inline values on Blizzard's Situations tab
-BetterSituation.lua    bootstrap, slash commands, module Init order
+TransmogSituations.lua    bootstrap, slash commands, module Init order
 ```
 
 Load order is fixed in the toc and matters: `Util` first (others capture its functions at file

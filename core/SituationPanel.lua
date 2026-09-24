@@ -28,8 +28,8 @@ end
 -- Frames come from a pool and are reused across ReleaseAll()/Acquire() cycles, so the
 -- FontString is cached on the frame itself and only ever created once.
 local function AcquireValueText(situationFrame)
-    if situationFrame.BetterSituationValue then
-        return situationFrame.BetterSituationValue
+    if situationFrame.TransmogSituationsValue then
+        return situationFrame.TransmogSituationsValue
     end
 
     local title = situationFrame.Title
@@ -44,7 +44,7 @@ local function AcquireValueText(situationFrame)
     value:SetMaxLines(1)
     value:SetWordWrap(false)
 
-    situationFrame.BetterSituationValue = value
+    situationFrame.TransmogSituationsValue = value
     return value
 end
 

@@ -10,7 +10,7 @@ cd "$ROOT" || exit 1
 fail=0
 
 echo "-- syntax --"
-for f in core/*.lua BetterSituation.lua; do
+for f in core/*.lua TransmogSituations.lua; do
     if "$LUAC" -p "$f" 2>/dev/null; then
         printf '  %-34s OK\n' "$f"
     else

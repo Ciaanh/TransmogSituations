@@ -1,6 +1,6 @@
 # Tests
 
-A Lua 5.1 suite that loads the addon exactly as the client does — the files `BetterSituation.toc`
+A Lua 5.1 suite that loads the addon exactly as the client does — the files `TransmogSituations.toc`
 lists, in its order, then `ADDON_LOADED` through the real bootstrap — against stubbed WoW apis.
 
 Run it from the repo root (override the interpreter with `LUA=` and `LUAC=` if it is not under
@@ -49,7 +49,7 @@ H.Done()
 | `equipment_sets.lua` | Eight ways the client reports sets: exact, ambiguous tie, tie broken by the applied set or the spec's set, the last-applied fallback, unknown, an id with no option |
 | `cache_invalidation.lua` | Categories appearing and disappearing mid-session, driven through the real events; an empty answer is never cached |
 | `attach_retry.lua` | The Situations tab attach keeps retrying until the frame exists |
-| `list_marking.lua` | `/bs list` marks the current and also-active options from the resolver's own answer |
+| `list_marking.lua` | `/ts list` marks the current and also-active options from the resolver's own answer |
 | `panels.lua` | Both panels: the tab row shows the value alone and the panel the compact form; both follow a dismount and the poll live while shown, stop when hidden, the panel remembers being closed by Escape, ignores other units' form changes, and lays labels and values out in two columns that never overlap |
 | `eligibility.lua` | The outfit cache (read through the api, skipped while pending, recorded on Apply, stale entries, scan and its refusals over unapplied changes, pruning) and the matcher: wildcards, unranked eligibility, verify by membership and its not-scored verdicts |
 
