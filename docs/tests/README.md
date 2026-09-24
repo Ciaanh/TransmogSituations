@@ -50,8 +50,8 @@ H.Done()
 | `cache_invalidation.lua` | Categories appearing and disappearing mid-session, driven through the real events; an empty answer is never cached |
 | `attach_retry.lua` | The Situations tab attach keeps retrying until the frame exists |
 | `list_marking.lua` | `/bs list` marks the current and also-active options from the resolver's own answer |
-| `panels.lua` | Both panels: the tab row shows the value alone and the panel the compact form; both follow a dismount and the poll live while shown, stop when hidden, and the panel remembers being closed by Escape |
-| `eligibility.lua` | The outfit cache (read through the api, skipped while pending, recorded on Apply, stale entries, scan, pruning) and the matcher: wildcards, unranked eligibility, verify by membership |
+| `panels.lua` | Both panels: the tab row shows the value alone and the panel the compact form; both follow a dismount and the poll live while shown, stop when hidden, the panel remembers being closed by Escape, ignores other units' form changes, and lays labels and values out in two columns that never overlap |
+| `eligibility.lua` | The outfit cache (read through the api, skipped while pending, recorded on Apply, stale entries, scan and its refusals over unapplied changes, pruning) and the matcher: wildcards, unranked eligibility, verify by membership and its not-scored verdicts |
 
 What this suite cannot do: prove the game supplies the inputs the stubs assume, or that the
 matching rules are Blizzard's. `docs/ROADMAP.md` lists the in-game checks that settle those.

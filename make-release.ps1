@@ -1,6 +1,10 @@
 # make-release.ps1
 # Packages addon files from the project root into BetterSituation-v<version>.zip
 # Usage: .\make-release.ps1 [-OutDir <path>]
+#
+# PowerShell 7+: Windows PowerShell 5.1's Compress-Archive writes "\" as the path separator
+# inside the zip, which addon hosts and non-Windows extractors do not treat as folders.
+#Requires -Version 7
 
 param(
     [string]$OutDir = (Join-Path $PSScriptRoot ".build")

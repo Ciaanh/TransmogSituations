@@ -70,8 +70,43 @@ H.Check("remembers it is shown", ns.BetterSituation.db.panel.shown, true)
 H.W.mounted = false
 H.Fire("PLAYER_MOUNT_DISPLAY_CHANGED")
 H.Check("follows a dismount", panelRows[2].value:GetText(), "Unmounted")
+
+-- Unit events come for every unit in range; another player's form change is not ours.
+local formsRow = panelRows[4]
+H.W.hasAltForm, H.W.inAltForm = true, false
+H.Fire("PLAYER_MOUNT_DISPLAY_CHANGED")
+H.Check("Racial Forms", formsRow.value:GetText(), "Dracthyr")
+H.W.inAltForm = true
+H.Fire("UNIT_FORM_CHANGED", "party1")
+H.Check("ignores another unit's form change", formsRow.value:GetText(), "Dracthyr")
+H.Fire("UNIT_FORM_CHANGED", "player")
+H.Check("follows the player's", formsRow.value:GetText(), "Visage")
+
 ns.StatusPanel.frame:Hide() -- as Escape would, without going through our Hide()
 H.Check("remembers it was closed", ns.BetterSituation.db.panel.shown, false)
 H.Check("and stops polling", H.LiveTickers(), 0)
+
+-- Labels and values sit in two columns that never overlap, whatever the locale. The harness
+-- measures 6px a character.
+H.Section("standalone panel: layout")
+ns.StatusPanel:Show()
+local panel = ns.StatusPanel.frame
+local function ColumnsFit()
+    for i = 1, #H.categories do
+        local row = panel.rows[i]
+        if row.label.width + 8 + row.value.width > panel.width - 24 then return false end
+    end
+    return true
+end
+H.Check("label column is the widest label", panel.rows[1].label.width, 6 * #"Specializations")
+H.Check("default width kept", panel.width, 260)
+H.Check("columns fit", ColumnsFit(), true)
+
+H.categories[1].name = string.rep("x", 40) -- a long localized category name
+ns.Triggers:InvalidateCategories()
+ns.StatusPanel:Refresh()
+H.Check("a long label is capped", panel.rows[1].label.width, 150)
+H.Check("the panel grows to keep room for values", panel.width, 24 + 150 + 8 + 130)
+H.Check("columns still fit", ColumnsFit(), true)
 
 H.Done()

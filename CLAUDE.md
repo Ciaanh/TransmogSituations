@@ -15,8 +15,11 @@ Goals, in order:
 3. Resolve the **eligible transmog set** from the current trigger values, client-side.
 
 All four phases of `docs/ROADMAP.md` are implemented. Phases 0–2 have run in game on both
-clients; **phases 3 and 4 (standalone panel, outfit cache, eligibility) have never run in game.**
-The roadmap's "In-game checks still outstanding" list is the current to-do.
+clients. Phases 3 and 4 (standalone panel, outfit cache, eligibility) have run **in part**: the
+passive cache and `/bs scan` work on both clients, `/bs verify` has agreed on both, the panel
+renders and updates live. Much is still unverified (panel persistence, recording on Apply, most
+Location / Movement / Weather values). The roadmap's "In-game checks still outstanding" list is
+the current to-do.
 
 ## Client targets
 
@@ -102,7 +105,7 @@ another event frame for game events; subscribe. (The bootstrap's `ADDON_LOADED` 
 ## Build / test / release
 
 ```powershell
-.\make-release.ps1            # reads "## Version" from the toc -> .build/BetterSituation-v<version>.zip
+.\make-release.ps1            # PowerShell 7+; reads "## Version" from the toc -> .build/BetterSituation-v<version>.zip
 ```
 
 ```sh
@@ -230,6 +233,15 @@ all picked across five re-picks). The pick happens only on a situation change an
 `/reload`. So `/bs verify` scores *membership* — is `GetActiveOutfitID()` among the eligible — and
 never a single predicted outfit. Do not reintroduce specificity ranking; `specificity` on an
 eligible entry is a display count only.
+
+`Verify()` returns a `verdict`, and only `"disagrees"` indicts the rules. `"disabled"` (situations
+switched off), `"none-applied"` (no pick made yet) and `"not-recorded"` (cache gap) mean the run
+cannot score anything; never report those as a rules failure.
+
+`/bs scan` switches the viewed outfit, which discards unapplied edits. It refuses while
+`HasPendingOutfitTransmogs()` / `HasPendingOutfitSituations()` or `InTransmogEvent()` is true,
+and stops between steps if the window closes or an edit starts — Blizzard's own outfit list asks
+before switching for the same reason.
 
 ## Conventions and gotchas
 

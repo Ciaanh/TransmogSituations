@@ -127,7 +127,7 @@ position, and the equipment-set id-0 guard — and each was caught only by a rea
 
 ## In-game checks still outstanding
 
-### Phases 3 and 4 — entirely unverified
+### Phases 3 and 4 — partly verified
 
 - [ ] **`/bs panel`** renders (seen on Forever, 2026-09-22) and updates live (confirmed on Retail,
       2026-09-22). Still to check: drags, and remembers its position and shown state across `/reload`.
@@ -279,6 +279,20 @@ as dead the same day and then reinstated hours later when a Retail dump showed p
 - [ ] **The panel persists visibility from OnShow/OnHide**, so closing it with Escape no longer
       brings it back on the next login.
 
+### Fixed by the 2026-09-25 release review, still to confirm in game
+
+- [ ] **`/bs scan` refuses over unapplied changes.** Make an appearance or situation edit, do not
+      apply it, run `/bs scan`: it must refuse, and the edit must still be there. Same during a
+      transmog event. Start a scan and close the window mid-way: it stops and says so.
+- [ ] **`/bs verify` verdicts.** Switch situations off and run it: "Not scored: situations are
+      switched off". With situations on and nothing applied yet: "Not scored: no outfit is applied".
+- [ ] **Panel layout.** Two columns, the label column as wide as the widest label (capped at 150),
+      values truncating with an ellipsis. Look at it in French and with a long loadout name.
+      Relies on `GetUnboundedStringWidth`, falling back to `GetStringWidth`.
+- [ ] **`UNIT_FORM_CHANGED` for other units is ignored** — in a group with a Worgen or Dracthyr,
+      the panel should not refresh on their form changes (visible only with `/bs debug` or a
+      profiler; low priority).
+
 ### Deliberately closed, do not reopen without a reason
 
 - The inline row on the Situations tab shows **only** the value: no reason, no also-active list, no
@@ -287,7 +301,7 @@ as dead the same day and then reinstated hours later when a Retail dump showed p
 
 ---
 
-## Phase 3 — Standalone panel — IMPLEMENTED, not yet verified in game
+## Phase 3 — Standalone panel — IMPLEMENTED, partly verified in game
 
 Same data as `/bs`, in a frame, for users who don't want chat spam.
 
@@ -303,7 +317,7 @@ Deliberately excluded: minimap button, options UI. Not requested.
 
 ---
 
-## Phase 4 — Dynamic eligible-set resolution — IMPLEMENTED, not yet verified in game
+## Phase 4 — Dynamic eligible-set resolution — IMPLEMENTED, partly verified in game
 
 The stated end goal, and the part with a genuine API obstacle.
 
@@ -327,9 +341,10 @@ So the outfit→situation mapping has to be reconstructed client-side. Three str
 | **C. Parse strings** | Read `situationCategories` | **Rejected** — localized and category-level. |
 
 **Recommendation: B as the default, A as an explicit opt-in** (`/bs scan`) for users who want the
-table filled immediately. Invalidate cache entries on
-`VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED` and stamp each with a timestamp so staleness is
-visible rather than silent.
+table filled immediately. Entries are re-recorded on
+`VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED` and on Apply, and an entry that contradicts the
+outfit's `situationCategories` is treated as stale (`OutfitCache:IsStale`) — that replaced the
+timestamps this plan first proposed.
 
 **How the implementation reads an assignment.** An earlier revision of this section claimed the
 option tree's `value` flag "is what Blizzard's checkboxes are driven from". It is not: Blizzard's
@@ -342,13 +357,13 @@ made while `HasPendingOutfitSituations()` is true, because the api answers with 
 mid-edit.
 
 The tree is still fetched per viewed outfit and the cached copy is dropped on those events — which
-is why they are in `Triggers.CATEGORY_EVENTS`, and why `RecordViewed` invalidates it itself rather
-than relying on handler order. Forgetting that once made `/bs list` report the previous outfit's
-assignments.
+is why they are in `Triggers.CATEGORY_EVENTS`. `Triggers` is the only event listener and drops the
+cache before any subscriber (the outfit cache included) hears the event. Forgetting that once made
+`/bs list` report the previous outfit's assignments.
 
-Assignments are keyed by the `situationID:specID:equipmentSetID` triple, not by `situationID`
-alone: spec and equipment-set options all share one `situationID` and differ only in the secondary
-id.
+Assignments are keyed by the `situationID:specID:loadoutID:equipmentSetID` 4-tuple
+(`OutfitCache.OptionKey`), not by `situationID` alone: spec, loadout and equipment-set options
+share one `situationID` and differ only in the secondary ids.
 
 ### The matching rules
 
@@ -377,7 +392,8 @@ makes the whole thing self-checking, which should be built in from the start rat
 1. Every time the resolver runs, compare the prediction against `GetActiveOutfitID()`.
 2. Log mismatches (behind the existing `BetterSituationDB.debug` flag) with the full trigger
    snapshot that produced them.
-3. Ship the mismatch log as `/bs verify`. The tiebreak rule and the unknowns from Phase 1
+3. Ship the mismatch log as `/bs verify`. (As built, `/bs verify` is on demand only: there is no
+   automatic comparison and no mismatch log, points 1 and 2.) The tiebreak rule and the unknowns from Phase 1
    (`LocationHouse`, time-of-day boundaries) will fall out of the collected mismatches far faster
    than from guessing.
 
@@ -441,6 +457,11 @@ scope), `Capabilities` before anything that probes, `Triggers` before its consum
    loadout option becomes the value with the spec option alongside, and the cache key is now the
    4-tuple `situationID:specID:loadoutID:equipmentSetID`. Still open: whether Blizzard counts a
    loadout with unsaved changes, and what the starter build maps to.
-4. What does Blizzard do when several outfits are eligible at once?
+4. ~~What does Blizzard do when several outfits are eligible at once?~~ ANSWERED, see 0.
 5. Does `Enum.WeatherType.Miscellaneous` map to a situation, or to nothing? (Untestable on
    Retail, which has no `C_Weather` at all; needs a Forever run.)
+6. Do event outfits (`isEventOutfit`) or disabled outfits (`isDisabled`) take part in situation
+   matching? `Eligibility` ignores both flags today. Blizzard's UI never reads `isDisabled`.
+7. Does Blizzard treat the approximate equipment set (last applied, one piece swapped) as still
+   equipped? `Eligibility` matches it as if it were exact. See "Does Blizzard agree with the
+   fallback?" above.

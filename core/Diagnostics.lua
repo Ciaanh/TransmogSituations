@@ -302,7 +302,8 @@ function Diagnostics:PrintRawDump()
 
     local hasAlt, inAlt = nil, nil
     if caps.hasAlternateFormInfo then
-        hasAlt, inAlt = C_PlayerInfo.GetAlternateFormInfo()
+        local _okAlt
+        _okAlt, hasAlt, inAlt = ns.Util.SafeCallAll(C_PlayerInfo.GetAlternateFormInfo)
     end
     local hour, minute = GetGameTime()
     ns.Print(
@@ -448,6 +449,12 @@ function Diagnostics:PrintEligible()
 
     local eligible, rejected = ns.Eligibility:GetEligible()
 
+    -- The match is still worth showing (it is what would apply), but nothing will switch.
+    local okEnabled, enabled = SafeCall(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
+    if okEnabled and enabled == false then
+        ns.Print("|cffffcc00Situations are switched off: Blizzard will not switch outfits automatically.|r")
+    end
+
     if #eligible == 0 then
         ns.Print("No outfit matches the current situation.")
     else
@@ -463,7 +470,7 @@ function Diagnostics:PrintEligible()
                 string.format(
                     "  %s %s (#%s) |cff808080- %s|r",
                     marker,
-                    entry.name,
+                    tostring(entry.name),
                     tostring(entry.index),
                     #entry.matched > 0 and table.concat(entry.matched, ", ") or "nothing constrained"
                 )
@@ -490,7 +497,7 @@ function Diagnostics:PrintEligible()
         )
         for _, entry in ipairs(notRecorded) do
             ns.Print(
-                string.format("  |cffffcc00%s (#%s) - %s|r", entry.name, tostring(entry.index), entry.reason)
+                string.format("  |cffffcc00%s (#%s) - %s|r", tostring(entry.name), tostring(entry.index), entry.reason)
             )
         end
         ns.Print("Open the transmog Situations tab and click through them, or use /bs scan.")
@@ -499,7 +506,7 @@ function Diagnostics:PrintEligible()
     if ns.BetterSituation.db.debug and #rejected > 0 then
         ns.Print("Rejected:")
         for _, entry in ipairs(rejected) do
-            ns.Print(string.format("  |cff808080%s - %s|r", entry.name, tostring(entry.reason)))
+            ns.Print(string.format("  |cff808080%s - %s|r", tostring(entry.name), tostring(entry.reason)))
         end
     end
 
@@ -530,7 +537,13 @@ function Diagnostics:PrintVerify()
     end
     ns.Print("Eligible: " .. (#names > 0 and table.concat(names, ", ") or "none"))
 
-    if report.agrees then
+    local verdict = report.verdict
+    if verdict == ns.Eligibility.VERDICT_DISABLED then
+        -- Whatever is applied was chosen by the player, not by the rules being scored.
+        ns.Print(
+            "|cffffcc00Not scored: situations are switched off, so Blizzard is not choosing outfits. Turn them on at the top of the Situations tab.|r"
+        )
+    elseif verdict == ns.Eligibility.VERDICT_AGREES then
         if #report.eligible > 1 then
             ns.Print(
                 string.format(
@@ -541,7 +554,13 @@ function Diagnostics:PrintVerify()
         else
             ns.Print("|cff00ff00Consistent with our rules.|r")
         end
-    elseif not report.activeRecorded then
+    elseif verdict == ns.Eligibility.VERDICT_NONE_APPLIED then
+        -- Blizzard only picks on a situation change, so an empty slot next to eligible outfits
+        -- is a moment without a pick rather than evidence against the rules.
+        ns.Print(
+            "|cffffcc00Not scored: no outfit is applied, although some are eligible. Blizzard only picks when a situation changes - trigger one (mount, dismount, change zone) and try again.|r"
+        )
+    elseif verdict == ns.Eligibility.VERDICT_NOT_RECORDED then
         -- Not a disagreement: the outfit Blizzard applied has no usable cache entry, so it
         -- was rejected before a single rule was consulted. Saying "the rules are incomplete"
         -- here would be an accusation the run cannot support.

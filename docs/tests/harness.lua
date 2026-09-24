@@ -135,7 +135,10 @@ H.outfits = {}
 H.activeOutfitID = 0
 H.viewedOutfitID = 0
 H.assigned = {} -- [outfitID] = { [optionKey] = true }: what GetOutfitSituation answers
-H.pending = false
+H.pending = false -- HasPendingOutfitSituations
+H.pendingTransmogs = false -- HasPendingOutfitTransmogs
+H.inTransmogEvent = false
+H.situationsEnabled = true
 H.sets = {} -- { { id, name, isEquipped, numItems, numEquipped } }
 H.specAssignedSet = nil
 H.loadedAddons = {}
@@ -199,6 +202,7 @@ function H.NewFrame()
     function f:IsShown() return self.shown end
     function f:IsVisible() return self.shown end
     function f:GetPoint() return "CENTER", nil, "CENTER", 0, 0 end
+    function f:SetSize(width, height) self.width, self.height = width, height; return f end
     function f:CreateFontString()
         -- Keeps its text and colour, so a test can read what a panel rendered.
         local fs = Chain()
@@ -206,6 +210,11 @@ function H.NewFrame()
         rawset(fs, "GetText", function(self) return rawget(self, "text") end)
         rawset(fs, "SetTextColor", function(self, r, g, b) rawset(self, "color", { r, g, b }) end)
         rawset(fs, "GetWidth", function() return 170 end)
+        -- A crude text metric (6px a character) and the width last set, so layout is checkable.
+        local function measure(self) return 6 * #tostring(rawget(self, "text") or "") end
+        rawset(fs, "GetUnboundedStringWidth", measure)
+        rawset(fs, "GetStringWidth", measure)
+        rawset(fs, "SetWidth", function(self, width) rawset(self, "width", width) end)
         return fs
     end
     function f:CreateTexture() return Chain() end
@@ -213,7 +222,7 @@ function H.NewFrame()
     -- Layout and dragging calls are accepted and ignored. Only these: a catch-all would make
     -- every missing field look present, and the addon checks fields (a cached FontString, an
     -- optional SetBackdrop) the way it would on a real frame.
-    for _, method in ipairs({ "SetSize", "SetWidth", "SetHeight", "SetPoint", "ClearAllPoints",
+    for _, method in ipairs({ "SetWidth", "SetHeight", "SetPoint", "ClearAllPoints",
         "SetAllPoints", "SetFrameStrata", "SetClampedToScreen", "SetMovable", "EnableMouse",
         "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetParent" }) do
         f[method] = function() return f end
@@ -256,12 +265,14 @@ C_TransmogOutfitInfo = {
     GetActiveOutfitID = function() return H.activeOutfitID end,
     GetCurrentlyViewedOutfitID = function() return H.viewedOutfitID end,
     GetOutfitsInfo = function() return H.outfits end,
-    GetOutfitSituationsEnabled = function() return true end,
+    GetOutfitSituationsEnabled = function() return H.situationsEnabled end,
     GetOutfitSituation = function(option)
         local assigned = H.assigned[H.viewedOutfitID]
         return (assigned and assigned[H.Key(option)]) and true or false
     end,
     HasPendingOutfitSituations = function() return H.pending end,
+    HasPendingOutfitTransmogs = function() return H.pendingTransmogs end,
+    InTransmogEvent = function() return H.inTransmogEvent end,
     ChangeViewedOutfit = function(outfitID) H.viewedOutfitID = outfitID end,
     CommitPendingSituations = function() H.pending = false end,
 }

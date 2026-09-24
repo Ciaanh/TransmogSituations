@@ -778,7 +778,14 @@ local function IsCategoryEvent(event)
     return false
 end
 
+-- Unit events arrive for every unit in range, and only the player's say anything about a trigger.
+local PLAYER_UNIT_EVENTS = { UNIT_FORM_CHANGED = true }
+
 function Triggers:Notify(event, ...)
+    if PLAYER_UNIT_EVENTS[event] and ... ~= "player" then
+        return
+    end
+
     if event == "EQUIPMENT_SWAP_FINISHED" then
         local result, setID = ...
         if result and setID then

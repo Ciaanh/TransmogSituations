@@ -191,7 +191,6 @@ function SituationPanel:Init()
         self:RefreshRows()
     end
 
-
     if not ns.Capabilities.hasSituations then
         return
     end

@@ -27,8 +27,8 @@ H.W.specIndex, H.W.specID = 1, 259
 
 local ns = H.Load()
 
--- "Viewing" an outfit with the given assignments. RecordViewed invalidates the category tree
--- itself; nothing here does it for it.
+-- "Viewing" an outfit with the given assignments. GetOutfitSituation answers for the viewed
+-- outfit, so nothing here needs to drop the category tree first.
 local function Record(outfitID, keys)
     H.viewedOutfitID = outfitID
     H.assigned[outfitID] = keys
@@ -108,6 +108,26 @@ local report = ns.Eligibility:Verify()
 H.Check("active outfit read", report and report.activeOutfitID, 3)
 H.Check("unrecorded counted", report and report.unrecorded, 1)
 H.Check("applied outfit among the eligible agrees", report and report.agrees, true)
+H.Check("verdict", report and report.verdict, "agrees")
+
+-- Switched off, Blizzard picks nothing: whatever is applied says nothing about the rules.
+H.situationsEnabled = false
+report = ns.Eligibility:Verify()
+H.Check("situations off is not scored", report.verdict, "disabled")
+H.Check("and is not an agreement", report.agrees, false)
+H.ClearChat()
+ns.Diagnostics:PrintEligible()
+H.Check("/bs eligible says situations are off", H.ChatText():find("switched off", 1, true) ~= nil, true)
+H.situationsEnabled = true
+
+-- Nothing applied while outfits are eligible: a moment without a pick, not a cache gap.
+H.activeOutfitID = 0
+H.Check("nothing applied is not scored", ns.Eligibility:Verify().verdict, "none-applied")
+H.ClearChat()
+ns.Diagnostics:PrintVerify()
+H.Check("and says so", H.ChatText():find("no outfit is applied", 1, true) ~= nil, true)
+H.Check("not blamed on the cache", H.ChatText():find("never been viewed, or has changed", 1, true), nil)
+H.activeOutfitID = 3
 
 H.activeOutfitID = 2 -- Combat: eligible, and constrains less than Rest
 H.Check("any eligible outfit agrees", ns.Eligibility:Verify().agrees, true)
@@ -116,10 +136,13 @@ H.activeOutfitID = 4 -- Raiding: recorded, current, and not eligible out here
 report = ns.Eligibility:Verify()
 H.Check("disagreement is detected", report.agrees, false)
 H.Check("a recorded active outfit scores the rules", report.activeRecorded, true)
+H.Check("verdict", report.verdict, "disagrees")
 
 -- Outfit 5 was never recorded, so it could not have been matched whatever the rules say.
 H.activeOutfitID = 5
-H.Check("unrecorded active outfit is not scorable", ns.Eligibility:Verify().activeRecorded, false)
+report = ns.Eligibility:Verify()
+H.Check("unrecorded active outfit is not scorable", report.activeRecorded, false)
+H.Check("verdict", report.verdict, "not-recorded")
 H.activeOutfitID = 3
 
 -- An edit committed while the cache was not looking leaves an entry describing assignments the
@@ -147,6 +170,39 @@ H.Check("starts with the window open", ns.OutfitCache:Scan(), true)
 H.RunTickers()
 H.Check("the unrecorded outfit is recorded", ns.OutfitCache:Get(5) ~= nil, true)
 H.Check("the original viewed outfit is restored", H.viewedOutfitID, 3)
+
+-- Switching outfits throws away unapplied edits; Blizzard's own list asks first. A scan refuses.
+H.pending = true
+H.Check("refuses with unapplied situation edits", ns.OutfitCache:Scan(), false)
+H.pending, H.pendingTransmogs = false, true
+H.Check("refuses with unapplied appearance edits", ns.OutfitCache:Scan(), false)
+H.pendingTransmogs, H.inTransmogEvent = false, true
+H.Check("refuses during a transmog event", ns.OutfitCache:Scan(), false)
+H.inTransmogEvent = false
+
+-- The same holds between two steps, and closing the window stops the sweep. Either way the
+-- viewed outfit is left alone rather than switched back under the player.
+local windowShown = true
+TransmogFrame = { IsShown = function() return windowShown end }
+for _, case in ipairs({
+    { "window closes", function() windowShown = false end, "transmog window closed" },
+    { "player starts editing", function() H.pending = true end, "unapplied changes" },
+}) do
+    ns.OutfitCache:Forget(5)
+    H.viewedOutfitID = 3
+    H.ClearChat()
+    ns.OutfitCache:Scan()
+    case[2]()
+    H.RunTickers()
+    H.Check("mid-scan, " .. case[1] .. ": stops", ns.OutfitCache.scanning, false)
+    H.Check("mid-scan, " .. case[1] .. ": records nothing more", ns.OutfitCache:Get(5), nil)
+    H.Check("mid-scan, " .. case[1] .. ": viewed outfit untouched", H.viewedOutfitID, 3)
+    H.Check("mid-scan, " .. case[1] .. ": says why", H.ChatText():find(case[3], 1, true) ~= nil, true)
+    windowShown, H.pending = true, false
+end
+ns.OutfitCache:Scan()
+H.RunTickers()
+H.Check("an uninterrupted scan records it", ns.OutfitCache:Get(5) ~= nil, true)
 TransmogFrame = nil
 
 -- Deleting an outfit must drop its cache entry when the client says the list changed -- and

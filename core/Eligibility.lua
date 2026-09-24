@@ -140,8 +140,21 @@ end
 -- the last trigger scores the pick made then, against the rules as they are now.
 --
 -- GetEligible already sorted every outfit into eligible or rejected-with-a-reason, so the verdict
--- is read off the applied outfit's row. A cache gap (never viewed, changed since) means it could
--- not have been matched at all, which says nothing about the rules.
+-- is read off the applied outfit's row. Only one verdict indicts the rules; the rest say why this
+-- run cannot score them:
+--   "agrees"       the applied outfit is eligible, or none is applied and none is eligible
+--   "disabled"     situations are switched off, so Blizzard is not picking at all
+--   "none-applied" nothing is applied although outfits are eligible. The pick is only made on a
+--                  situation change, so this is a moment without a pick, not a wrong one
+--   "not-recorded" the applied outfit has a cache gap (never viewed, changed since), so it
+--                  could not have been matched at all
+--   "disagrees"    the applied outfit is recorded and current, and the rules reject it
+Eligibility.VERDICT_AGREES = "agrees"
+Eligibility.VERDICT_DISABLED = "disabled"
+Eligibility.VERDICT_NONE_APPLIED = "none-applied"
+Eligibility.VERDICT_NOT_RECORDED = "not-recorded"
+Eligibility.VERDICT_DISAGREES = "disagrees"
+
 function Eligibility:Verify()
     local okActive, activeOutfitID = ns.Util.SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
     if not okActive then
@@ -175,9 +188,24 @@ function Eligibility:Verify()
         end
     end
 
-    -- No outfit applied and none eligible is agreement too.
-    local noneApplied = type(activeOutfitID) ~= "number" or activeOutfitID == 0
-    report.agrees = report.activeEligible or (noneApplied and #eligible == 0)
+    -- Only a definite false counts: a client that will not say is scored as usual.
+    local okEnabled, enabled = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
+    report.situationsDisabled = okEnabled and enabled == false
+
+    report.noneApplied = type(activeOutfitID) ~= "number" or activeOutfitID == 0
+
+    if report.situationsDisabled then
+        report.verdict = Eligibility.VERDICT_DISABLED
+    elseif report.activeEligible or (report.noneApplied and #eligible == 0) then
+        report.verdict = Eligibility.VERDICT_AGREES
+    elseif report.noneApplied then
+        report.verdict = Eligibility.VERDICT_NONE_APPLIED
+    elseif not report.activeRecorded then
+        report.verdict = Eligibility.VERDICT_NOT_RECORDED
+    else
+        report.verdict = Eligibility.VERDICT_DISAGREES
+    end
+    report.agrees = report.verdict == Eligibility.VERDICT_AGREES
 
     return report
 end

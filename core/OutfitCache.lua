@@ -309,6 +309,25 @@ end
 -- original viewed outfit is restored at the end.
 local SCAN_STEP = 0.2
 
+local function IsTransmogFrameShown()
+    return TransmogFrame and TransmogFrame.IsShown and TransmogFrame:IsShown() and true or false
+end
+
+-- Both checks exist on both clients. A client that refuses to answer is treated as having
+-- pending changes: the cost of a wrong "no" is the player's unsaved work.
+local function HasPendingChanges()
+    for _, fn in ipairs({ C_TransmogOutfitInfo.HasPendingOutfitTransmogs, C_TransmogOutfitInfo.HasPendingOutfitSituations }) do
+        if type(fn) == "function" then
+            local ok, pending = ns.Util.SafeCall(fn)
+            if not ok or pending then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 function OutfitCache:Scan()
     local Report = ns.Print
 
@@ -333,8 +352,24 @@ function OutfitCache:Scan()
     end
 
     -- Changing the viewed outfit only makes sense while the transmog window is driving it.
-    if not (TransmogFrame and TransmogFrame.IsShown and TransmogFrame:IsShown()) then
+    if not IsTransmogFrameShown() then
         Report("Open the transmog window first - the scan drives its outfit selection.")
+        return false
+    end
+
+    -- Blizzard's own outfit list never switches outfits during a transmog event
+    -- (TransmogOutfitEntryMixin:OnClick, both clients); the list is locked to the event outfit.
+    local okEvent, inEvent = ns.Util.SafeCall(C_TransmogOutfitInfo.InTransmogEvent)
+    if okEvent and inEvent then
+        Report("Not during a transmog event.")
+        return false
+    end
+
+    -- Switching the viewed outfit discards unapplied edits. Blizzard's list asks first
+    -- (TransmogOutfitEntryMixin:CheckPendingAction shows TRANSMOG_PENDING_CHANGES); a scan has
+    -- no business deciding that for the player, so it refuses instead.
+    if HasPendingChanges() then
+        Report("You have unapplied transmog or situation changes. Apply or undo them first.")
         return false
     end
 
@@ -356,9 +391,19 @@ function OutfitCache:Scan()
     self.scanning = true
     local index, recorded, failed = 0, 0, 0
 
-    local function Finish()
+    local function Finish(abortReason)
         self.scanning = false
-        ns.Util.SafeCall(C_TransmogOutfitInfo.ChangeViewedOutfit, original)
+
+        -- An aborted scan leaves the viewed outfit alone: the player is editing it now, or the
+        -- window is shut and Blizzard re-selects on the next open.
+        if abortReason then
+            Report(string.format("Scan stopped (%s): %d outfit(s) recorded.", abortReason, recorded))
+            return
+        end
+
+        if original ~= 0 then
+            ns.Util.SafeCall(C_TransmogOutfitInfo.ChangeViewedOutfit, original)
+        end
 
         if failed > 0 then
             Report(
@@ -382,6 +427,19 @@ function OutfitCache:Scan()
             if index > #pending then
                 ticker:Cancel()
                 Finish()
+                return
+            end
+
+            -- The player can close the window or start editing between two steps.
+            local abortReason = nil
+            if not IsTransmogFrameShown() then
+                abortReason = "transmog window closed"
+            elseif HasPendingChanges() then
+                abortReason = "unapplied changes"
+            end
+            if abortReason then
+                ticker:Cancel()
+                Finish(abortReason)
                 return
             end
 

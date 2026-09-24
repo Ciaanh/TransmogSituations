@@ -10,6 +10,19 @@ ns.StatusPanel = StatusPanel
 local PANEL_NAME = "BetterSituationStatusPanel"
 local WIDTH, ROW_HEIGHT, PADDING, HEADER = 260, 16, 12, 28
 
+-- Two columns that never overlap: labels get the width of the widest one (capped, so a very long
+-- localized name truncates rather than squeezing the values out), values get what is left and
+-- truncate with an ellipsis. The panel only grows past WIDTH for labels, which change when the
+-- category set does, not with every value -- so it does not jitter as values change.
+local GAP, MAX_LABEL_WIDTH, MIN_VALUE_WIDTH = 8, 150, 130
+
+-- Width of the text on one line. GetStringWidth is bounded by a width already set on the
+-- FontString, which after the first layout is exactly the value being measured for.
+local function TextWidth(fontString)
+    local ok, width = ns.Util.SafeCall(fontString.GetUnboundedStringWidth or fontString.GetStringWidth, fontString)
+    return ok and tonumber(width) or 0
+end
+
 local function EnsureSaved()
     local db = ns.BetterSituation and ns.BetterSituation.db
     if not db then
@@ -158,10 +171,14 @@ function StatusPanel:AcquireRow(index)
     row.label = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.label:SetPoint("TOPLEFT", PADDING, -(HEADER + (index - 1) * ROW_HEIGHT))
     row.label:SetJustifyH("LEFT")
+    row.label:SetWordWrap(false)
+    row.label:SetMaxLines(1)
 
     row.value = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.value:SetPoint("TOPRIGHT", -PADDING, -(HEADER + (index - 1) * ROW_HEIGHT))
     row.value:SetJustifyH("RIGHT")
+    row.value:SetWordWrap(false)
+    row.value:SetMaxLines(1)
 
     frame.rows[index] = row
     return row
@@ -197,7 +214,27 @@ function StatusPanel:Refresh()
         self.frame.Title:SetText("BetterSituation")
     end
 
-    self.frame:SetHeight(HEADER + math.max(count, 1) * ROW_HEIGHT + PADDING)
+    self:Layout(count)
+end
+
+function StatusPanel:Layout(count)
+    local rows = self.frame.rows
+
+    local labelWidth = 0
+    for index = 1, count do
+        labelWidth = math.max(labelWidth, TextWidth(rows[index].label))
+    end
+    labelWidth = math.min(math.ceil(labelWidth), MAX_LABEL_WIDTH)
+
+    local width = math.max(WIDTH, 2 * PADDING + labelWidth + GAP + MIN_VALUE_WIDTH)
+    local valueWidth = width - 2 * PADDING - labelWidth - GAP
+
+    for index = 1, count do
+        rows[index].label:SetWidth(labelWidth)
+        rows[index].value:SetWidth(valueWidth)
+    end
+
+    self.frame:SetSize(width, HEADER + math.max(count, 1) * ROW_HEIGHT + PADDING)
 end
 
 -- Live while shown: every change Triggers hears of, plus its poll for the values that have no
@@ -240,7 +277,6 @@ function StatusPanel:Init()
     self.onChange = function()
         self:Refresh()
     end
-
 
     local saved = EnsureSaved()
     if saved and saved.shown then
