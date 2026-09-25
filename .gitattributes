@@ -12,6 +12,9 @@
 # PowerShell stays CRLF on disk everywhere.
 *.ps1   text eol=crlf
 
+# Shell scripts stay LF, or bash chokes on the CR.
+*.sh    text eol=lf
+
 # Binary assets shipped with addons - never touch these.
 *.zip   binary
 *.blp   binary
