@@ -70,6 +70,7 @@ make-release.ps1             # stages + zips a release into .build/
 CHANGELOG.md                 # release notes; the CI publishes the sections since the last tag
 .github/workflows/           # tests.yml (push/PR), release.yml (tag -> CurseForge)
 tests/                       # Lua 5.1 replay tests, run with ./tests/run.sh
+images/                      # CurseForge logo (logo.png, built on Blizzard's transmog cursor); never shipped
 ```
 
 Load order is declared in `TransmogSituations.toc` and matters: `Util` first (others capture its

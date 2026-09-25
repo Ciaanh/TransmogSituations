@@ -12,6 +12,7 @@ manual-changelog: CHANGELOG.md
 # the packager on its own.
 ignore:
     - tests
+    - images
     - CHANGELOG.md
     - CLAUDE.md
     - make-release.ps1
