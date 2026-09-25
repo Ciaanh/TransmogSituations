@@ -30,6 +30,8 @@ $zipPath  = Join-Path $OutDir $zipName
 $stageDir = Join-Path $projectRoot "TransmogSituations"
 
 # --- Files and folders to include in the release ----------------------------
+# Keep in sync with .pkgmeta's ignore list, which the CurseForge release (.github/workflows)
+# packages from instead: a file added here must not be ignored there, and vice versa.
 $includes = @(
     "TransmogSituations.lua",
     "TransmogSituations.toc",

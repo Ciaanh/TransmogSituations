@@ -2,8 +2,10 @@
 ## Title: TransmogSituations
 ## Notes: Tracks transmog situation criteria
 ## Author: Ciaanh
-## Version: 0.2.0
+## Version: 0.2.0-beta1
 ## SavedVariables: TransmogSituationsDB
+## X-Website: https://github.com/Ciaanh/TransmogSituations
+## X-License: MIT
 
 core\Util.lua
 core\Capabilities.lua
