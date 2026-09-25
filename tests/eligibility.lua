@@ -1,5 +1,5 @@
 ---@diagnostic disable: undefined-global, lowercase-global
--- Phase 4: the outfit cache and the eligibility matcher.
+-- The outfit cache and the eligibility matcher.
 --
 -- This proves the rules behave as designed, NOT that they are Blizzard's. /ts verify is what
 -- scores them against reality.

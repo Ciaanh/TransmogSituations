@@ -4,7 +4,7 @@
 -- Most of these states have never been reached in game: no capture has been in a dungeon,
 -- a raid, an arena, flying, or in any weather but Clear. This does not prove the game reports
 -- what we assume it does -- only that given those inputs the right option comes back. The
--- in-game checks in _refs/ROADMAP.md are still what settles the inputs.
+-- in-game checks are still what settles the inputs.
 local H = dofile((arg[1] or ".") .. "/tests/harness.lua")
 
 H.categories = H.RetailTree()

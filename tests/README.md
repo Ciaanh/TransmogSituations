@@ -54,4 +54,4 @@ H.Done()
 | `eligibility.lua` | The outfit cache (read through the api, skipped while pending, recorded on Apply, stale entries, scan and its refusals over unapplied changes, pruning) and the matcher: wildcards, unranked eligibility, verify by membership and its not-scored verdicts |
 
 What this suite cannot do: prove the game supplies the inputs the stubs assume, or that the
-matching rules are Blizzard's. `_refs/ROADMAP.md` lists the in-game checks that settle those.
+matching rules are Blizzard's. Only in-game checks settle those.

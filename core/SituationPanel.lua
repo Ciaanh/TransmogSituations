@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Phase 2: render each trigger's live value inline, directly under its label on the
+-- Render each trigger's live value inline, directly under its label on the
 -- Situations tab, instead of as one detached block that fights the list for space.
 --
 -- Blizzard's row (TransmogSituationTemplate) is 554x50 with Title 170 wide (maxLines=2) at

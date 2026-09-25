@@ -14,12 +14,11 @@ Goals, in order:
 2. Provide `/ts` (`/transmogsituations`) to read those values from chat at any time.
 3. Resolve the **eligible transmog set** from the current trigger values, client-side.
 
-All four phases of `_refs/ROADMAP.md` are implemented. Phases 0–2 have run in game on both
-clients. Phases 3 and 4 (standalone panel, outfit cache, eligibility) have run **in part**: the
-passive cache and `/ts scan` work on both clients, `/ts verify` has agreed on both, the panel
-renders and updates live. Much is still unverified (panel persistence, recording on Apply, most
-Location / Movement / Weather values). The roadmap's "In-game checks still outstanding" list is
-the current to-do.
+All of it is implemented. The capability probe, the trigger model, `/ts` and the Situations tab
+values have run in game on both clients. The standalone panel, outfit cache and eligibility have
+run **in part**: the passive cache and `/ts scan` work on both clients, `/ts verify` has agreed on
+both, the panel renders and updates live. Much is still unverified (panel persistence, recording
+on Apply, most Location / Movement / Weather values).
 
 ## Client targets
 
@@ -68,9 +67,6 @@ core/StatusPanel.lua         # the standalone /ts panel frame
 core/SituationPanel.lua      # inline values on Blizzard's Situations tab
 make-release.ps1             # stages + zips a release into .build/
 tests/                       # Lua 5.1 replay tests, run with ./tests/run.sh
-_refs/                       # local-only research notes (gitignored, never shipped), including:
-  ROADMAP.md                 #   phased plan + the list of in-game checks still outstanding
-  Situations Data.txt        #   captured in-game output + enum dumps (see Domain reference)
 ```
 
 Load order is declared in `TransmogSituations.toc` and matters: `Util` first (others capture its
@@ -205,7 +201,7 @@ Categories are conditionally present — code must not assume a fixed list:
 The category list also changes mid-session (saving a first equipment set, reaching level 10), so
 `Triggers` invalidates its cache on `Triggers.CATEGORY_EVENTS`.
 
-### Outfit assignments (Phase 4)
+### Outfit assignments
 
 There is no API mapping an outfit to its situations; only the *currently viewed* outfit can be
 read. `OutfitCache` records it whenever it changes, asking `GetOutfitSituation(option)` per option
@@ -264,6 +260,4 @@ before switching for the same reason.
   `lastAppliedSet[charKey]`, `outfitSituations[charKey][outfitID]`. Character-scoped data is keyed
   by `ns.Util.CharacterKey()`.
 - The addon was called **BetterSituation** (slash `/bs`, SavedVariables `BetterSituationDB`) until
-  just before its first release; the captures in `_refs/Situations Data.txt` still show that prefix.
-- `_refs/Situations Data.txt` holds raw in-game dumps (including a French-client run that demonstrates
-  the localization problem) plus the generated enum tables.
+  just before its first release.

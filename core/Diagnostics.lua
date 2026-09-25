@@ -439,7 +439,7 @@ function Diagnostics:PrintRawDump()
     end
 end
 
--- Phase 4 reporting. Eligibility is reconstructed from a cache the player
+-- Eligibility is reconstructed from a cache the player
 -- fills by browsing outfits, so the output always says how complete that cache is.
 function Diagnostics:PrintEligible()
     if not ns.Capabilities.hasSituations then

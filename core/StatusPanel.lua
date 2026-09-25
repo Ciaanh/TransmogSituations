@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Phase 3: the same trigger values as /ts, in a frame that works anywhere, rather than only
+-- The same trigger values as /ts, in a frame that works anywhere, rather than only
 -- inside Blizzard's transmog window. Reads ns.Triggers like every other consumer, so it
 -- tracks the conditional categories and the two clients' differences for free.
 
