@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Phase 4, part two: which outfits match the situation the player is in right now.
+-- Which outfits match the situation the player is in right now.
 --
 -- This is a reconstruction. Blizzard resolves the real answer server-side and reports it
 -- through GetActiveOutfitID, so the rules can be checked against the truth -- see Verify().

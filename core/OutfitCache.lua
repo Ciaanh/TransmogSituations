@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Phase 4, part one: reconstruct the outfit -> situation mapping the client never exposes.
+-- Reconstruct the outfit -> situation mapping the client never exposes.
 --
 -- There is no API that answers "which situations is outfit N bound to". GetOutfitSituation
 -- only ever answers for the *currently viewed* outfit, and GetOutfitsInfo's

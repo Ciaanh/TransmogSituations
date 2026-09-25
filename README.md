@@ -53,15 +53,13 @@ refuses to run over them, because switching outfits would discard them).
 - **Time of Day** band boundaries are an estimate and are marked `*` in `/ts`.
 - **Equipment sets** have no "currently equipped set" API. When you swap an item out of the set you
   last applied, the value is shown with `~` as an approximation.
-- **Forever beta saved data**: the beta client does not reliably keep addon data across `/reload`
-  or logout. If the outfit cache or the panel position is gone after a login, run `/ts scan` again.
 - Eligibility is a reconstruction of Blizzard's rules. `/ts verify` says whether it agrees with the
   outfit Blizzard applied; a disagreement is worth reporting with a `/ts dump`.
 
 ## Development
 
-There is no test runner inside the game client. `docs/tests/run.sh` replays four real in-game
+There is no test runner inside the game client. `tests/run.sh` replays four real in-game
 captures and drives every resolver branch under a stub environment; run it after any change under
-`core/`. `docs/ROADMAP.md` tracks what has and has not been verified in game.
+`core/`.
 
 `.\make-release.ps1` (PowerShell 7+) stages the shipped files and zips them into `.build/`.

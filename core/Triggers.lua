@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Phase 1: the single source of truth for "what is this trigger's value right now?".
+-- The single source of truth for "what is this trigger's value right now?".
 --
 -- Everything downstream (chat command, Situations tab overlay, standalone panel, and later
 -- the eligible-set resolver) reads from here. The canonical answer is always a
@@ -98,7 +98,7 @@ local SITUATION = {
 }
 Triggers.SITUATION = SITUATION
 
--- The per-category "any value" options, for the Phase 4 matcher.
+-- The per-category "any value" options, for the eligibility matcher.
 Triggers.WILDCARD_SITUATIONS = {
     [SITUATION.AllSpecs] = true,
     [SITUATION.AllLocations] = true,
@@ -304,7 +304,7 @@ resolvers[UI_TRIGGER.Location] = {
 
         -- Locations is a checkbox category and genuinely multi-valued: standing in a
         -- neighborhood also counts as resting. Report the most specific as the value and
-        -- keep the rest in `also` so the Phase 4 matcher can use them.
+        -- keep the rest in `also` so the eligibility matcher can use them.
         local resting = IsResting()
 
         local function Primary(situationID)
@@ -598,7 +598,7 @@ resolvers[UI_TRIGGER.Weather] = {
 
 -- UNVERIFIED: the client's own labels are All Times / Morning / Midday / Evening / Night,
 -- but the hour each band starts at is still a guess. Confirmed datapoints so far:
--- 23:03 -> Night, 14:08 -> Midday. See docs/ROADMAP.md, open question 2.
+-- 23:03 -> Night, 14:08 -> Midday.
 local TIME_BOUNDARIES = {
     { from = 6, to = 12, situation = SITUATION.TimeMorning },
     { from = 12, to = 17, situation = SITUATION.TimeDay },

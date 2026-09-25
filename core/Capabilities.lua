@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Phase 0: one place that answers "does this client have that system?".
+-- One place that answers "does this client have that system?".
 -- Forever exposes more than Retail (C_Weather is the notable gap), so every optional
 -- subsystem is probed once here instead of being re-tested ad hoc at each call site.
 
