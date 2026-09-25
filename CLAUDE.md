@@ -67,10 +67,10 @@ core/Diagnostics.lua         # all chat output: /ts, list, dump, eligible, verif
 core/StatusPanel.lua         # the standalone /ts panel frame
 core/SituationPanel.lua      # inline values on Blizzard's Situations tab
 make-release.ps1             # stages + zips a release into .build/
-docs/ROADMAP.md              # phased plan + the list of in-game checks still outstanding
-docs/tests/                  # Lua 5.1 replay tests, run with ./docs/tests/run.sh
+docs/ROADMAP.md              # phased plan + the list of in-game checks still outstanding (local-only, gitignored)
+docs/tests/                  # Lua 5.1 replay tests, run with ./docs/tests/run.sh (local-only, gitignored)
 _refs/                       # local-only research notes (gitignored, never shipped)
-Situations Data.txt          # captured in-game output + enum dumps (see Domain reference)
+Situations Data.txt          # captured in-game output + enum dumps (see Domain reference) (local-only, gitignored)
 ```
 
 Load order is declared in `TransmogSituations.toc` and matters: `Util` first (others capture its
