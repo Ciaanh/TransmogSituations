@@ -6,6 +6,7 @@
 ## SavedVariables: TransmogSituationsDB
 ## X-Website: https://github.com/Ciaanh/TransmogSituations
 ## X-License: MIT
+## X-Curse-Project-ID: 1711133
 
 core\Util.lua
 core\Capabilities.lua
