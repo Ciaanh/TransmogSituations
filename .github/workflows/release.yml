@@ -10,7 +10,7 @@
 # version, or the run fails before anything is uploaded.
 #
 # Required repository secret (Settings > Secrets and variables > Actions):
-#   CF_API_KEY - https://authors.curseforge.com/account/api-tokens
+#   CF_API_KEY - https://authors.curseforge.com/#/settings/api-tokens
 name: Release
 
 on:
