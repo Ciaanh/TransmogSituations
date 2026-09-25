@@ -7,12 +7,6 @@ currently evaluate to; TransmogSituations does.
 
 Targets the **WoW Forever beta** and stays compatible with **live Retail**.
 
-## Installation
-
-Extract the zip into `World of Warcraft\<client>\Interface\AddOns\`, so that the folder
-`Interface\AddOns\TransmogSituations\` contains `TransmogSituations.toc`. `<client>` is `_retail_` for
-Retail, or the Forever beta's own client folder. Then restart the game or `/reload`.
-
 ## Features
 
 - Live trigger values rendered inline on the transmog **Situations tab**, under each category title.
@@ -55,11 +49,3 @@ refuses to run over them, because switching outfits would discard them).
   last applied, the value is shown with `~` as an approximation.
 - Eligibility is a reconstruction of Blizzard's rules. `/ts verify` says whether it agrees with the
   outfit Blizzard applied; a disagreement is worth reporting with a `/ts dump`.
-
-## Development
-
-There is no test runner inside the game client. `tests/run.sh` replays four real in-game
-captures and drives every resolver branch under a stub environment; run it after any change under
-`core/`.
-
-`.\make-release.ps1` (PowerShell 7+) stages the shipped files and zips them into `.build/`.

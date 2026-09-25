@@ -66,14 +66,19 @@ core/Diagnostics.lua         # all chat output: /ts, list, dump, eligible, verif
 core/StatusPanel.lua         # the standalone /ts panel frame
 core/SituationPanel.lua      # inline values on Blizzard's Situations tab
 make-release.ps1             # stages + zips a release into .build/
+.pkgmeta                     # what the CurseForge packager leaves out of the zip
+CHANGELOG.md                 # release notes; the CI publishes the sections since the last tag
+.github/workflows/           # tests.yml (push/PR), release.yml (tag -> CurseForge)
 tests/                       # Lua 5.1 replay tests, run with ./tests/run.sh
+images/                      # CurseForge logo (logo.png, built on Blizzard's transmog cursor); never shipped
 ```
 
 Load order is declared in `TransmogSituations.toc` and matters: `Util` first (others capture its
 functions at file scope), `Capabilities` before anything that probes, `Triggers` before its
 consumers, `OutfitCache` before `Diagnostics`. Adding a new file means adding it to the toc
 **and** to `$includes` in `make-release.ps1` (which ships only the listed files, so `tests/` never
-reaches the zip).
+reaches the zip). A new *top-level* file or folder that must not ship also goes into `.pkgmeta`'s
+`ignore` list: that is a blacklist, so the CurseForge package includes anything it does not name.
 
 Module pattern: every file does `local _, ns = ...` and assigns a table onto `ns`. A module with
 setup to do exposes `Module:Init()`, which `TransmogSituations.lua` calls from its `ADDON_LOADED`
@@ -107,6 +112,13 @@ another event frame for game events; subscribe. (The bootstrap's `ADDON_LOADED` 
 ```sh
 ./tests/run.sh                # Lua 5.1 replay suite; LUA= / LUAC= override the interpreter path
 ```
+
+Publishing is a tag push: `git tag v<version> && git push origin v<version>` runs
+`.github/workflows/release.yml`, which runs the suite, then BigWigs packager uploads to CurseForge
+(Retail + Forever, from `## Interface:`). The tag, the toc's `## Version:` and the topmost
+`CHANGELOG.md` section must name the same version or the run stops before uploading; a tag containing
+`beta` is uploaded as a beta file. It needs `## X-Curse-Project-ID:` in the toc and the repository
+secret `CF_API_KEY`.
 
 Run the suite after any change under `core/`. It loads the addon through the toc and the real
 `ADDON_LOADED` bootstrap against the stubs in `tests/harness.lua`, replays four real

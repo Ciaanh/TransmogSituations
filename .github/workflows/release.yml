@@ -1,0 +1,96 @@
+# Publishes the addon to CurseForge on every version tag push, once the test suite passes
+# (e.g. `git tag v0.2.0-beta1 && git push origin v0.2.0-beta1`).
+#
+# The CurseForge project id is read from the TOC (X-Curse-Project-ID); the game versions from
+# `## Interface:` (120100 -> Retail, 16001 -> Forever); package contents from .pkgmeta; the
+# changelog is every CHANGELOG.md section added since the previous tag. A tag containing "beta"
+# (or "alpha") is uploaded as a beta (or alpha) file.
+#
+# The tag, `## Version:` in the TOC and the topmost CHANGELOG.md section must all name the same
+# version, or the run fails before anything is uploaded.
+#
+# Required repository secret (Settings > Secrets and variables > Actions):
+#   CF_API_KEY - https://authors.curseforge.com/account/api-tokens
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag, the TOC and the CurseForge setup agree
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          toc_field() {
+            sed -n "s/^## $1:[[:space:]]*//p" TransmogSituations.toc | tr -d '\r' | sed 's/[[:space:]]*$//' | head -n 1
+          }
+
+          toc_version="$(toc_field Version)"
+          if [ "$toc_version" != "$version" ]; then
+            echo "::error::TOC '## Version: $toc_version' does not match tag $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+          # The packager silently skips CurseForge without a numeric id, which would turn a tag
+          # push into a run that succeeds and publishes nothing.
+          project_id="$(toc_field X-Curse-Project-ID)"
+          if ! [[ "$project_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::TransmogSituations.toc has no '## X-Curse-Project-ID: <id>' line"
+            exit 1
+          fi
+
+          if [ -z "$CF_API_KEY" ]; then
+            echo "::error::repository secret CF_API_KEY is not set"
+            exit 1
+          fi
+
+      - name: Trim changelog to everything since the previous release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          prev="$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          prev="${prev#v}"
+
+          awk -v stop="## [$prev]" '
+            /^## \[/ {
+              if (found && index($0, stop) == 1) exit
+              if ($0 !~ /\[Unreleased\]/) found = 1
+            }
+            found
+          ' CHANGELOG.md > release-changelog.md
+
+          if ! grep -qF "## [$version]" release-changelog.md; then
+            echo "::error::CHANGELOG.md topmost released section does not match tag $GITHUB_REF_NAME"
+            cat release-changelog.md
+            exit 1
+          fi
+
+          if [ -n "$prev" ] && ! grep -qF "## [$prev]" CHANGELOG.md; then
+            echo "::warning::previous release v$prev has no CHANGELOG.md section; published notes cover the whole file"
+          fi
+
+          echo "Publishing notes since ${prev:-<first release>}:"
+          grep -E '^## \[' release-changelog.md
+          mv release-changelog.md CHANGELOG.md
+
+      - name: Package and publish
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
