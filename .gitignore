@@ -1,7 +1,9 @@
 .build/
-BetterSituation/
+TransmogSituations/
 .vscode/
 *.log
 *.tmp
 .DS_Store
 Thumbs.db
+
+_refs/

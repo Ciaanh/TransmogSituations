@@ -1,9 +1,0 @@
-## Interface: 120005
-## Title: BetterSituation
-## Notes: Tracks transmog situation criteria and predicts likely outfit matches.
-## Author: BetterSituation Contributors
-## Version: 0.1.0
-## SavedVariables: BetterSituationDB
-## SavedVariablesPerCharacter: BetterSituationCharDB
-
-BetterSituation.lua

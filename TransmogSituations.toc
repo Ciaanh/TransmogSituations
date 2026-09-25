@@ -1,0 +1,16 @@
+## Interface: 120100, 16001
+## Title: TransmogSituations
+## Notes: Tracks transmog situation criteria
+## Author: Ciaanh
+## Version: 0.2.0
+## SavedVariables: TransmogSituationsDB
+
+core\Util.lua
+core\Capabilities.lua
+core\Triggers.lua
+core\OutfitCache.lua
+core\Eligibility.lua
+core\Diagnostics.lua
+core\StatusPanel.lua
+core\SituationPanel.lua
+TransmogSituations.lua

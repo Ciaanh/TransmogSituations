@@ -1,6 +1,10 @@
 # make-release.ps1
-# Packages addon files from the project root into BetterSituation-v<version>.zip
+# Packages addon files from the project root into TransmogSituations-v<version>.zip
 # Usage: .\make-release.ps1 [-OutDir <path>]
+#
+# PowerShell 7+: Windows PowerShell 5.1's Compress-Archive writes "\" as the path separator
+# inside the zip, which addon hosts and non-Windows extractors do not treat as folders.
+#Requires -Version 7
 
 param(
     [string]$OutDir = (Join-Path $PSScriptRoot ".build")
@@ -9,7 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $projectRoot = $PSScriptRoot
-$tocFile     = Join-Path $projectRoot "BetterSituation.toc"
+$tocFile     = Join-Path $projectRoot "TransmogSituations.toc"
 
 # --- Read version from TOC --------------------------------------------------
 $versionLine = Select-String -Path $tocFile -Pattern "^## Version:\s*(.+)" |
@@ -21,17 +25,17 @@ if (-not $versionLine) {
 $version = $versionLine.Matches[0].Groups[1].Value.Trim()
 $tag     = "v$version"
 
-$zipName  = "BetterSituation-$tag.zip"
+$zipName  = "TransmogSituations-$tag.zip"
 $zipPath  = Join-Path $OutDir $zipName
-$stageDir = Join-Path $projectRoot "BetterSituation"
+$stageDir = Join-Path $projectRoot "TransmogSituations"
 
 # --- Files and folders to include in the release ----------------------------
 $includes = @(
-    "BetterSituation.lua",
-    "BetterSituation.toc",
+    "TransmogSituations.lua",
+    "TransmogSituations.toc",
     "LICENSE",
     "README.md",
-    "CHANGELOG.md"
+    "core"
 )
 
 # --- Clean previous artifacts -----------------------------------------------
@@ -39,7 +43,7 @@ if (Test-Path $stageDir) { Remove-Item $stageDir -Recurse -Force }
 if (Test-Path $zipPath)  { Remove-Item $zipPath  -Force }
 
 # --- Stage ------------------------------------------------------------------
-Write-Host "Staging files from project root -> BetterSituation/"
+Write-Host "Staging files from project root -> TransmogSituations/"
 New-Item -ItemType Directory -Path $stageDir | Out-Null
 
 foreach ($entry in $includes) {
