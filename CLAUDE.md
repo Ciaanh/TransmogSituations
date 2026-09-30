@@ -66,9 +66,9 @@ core/Diagnostics.lua         # all chat output: /ts, list, dump, eligible, verif
 core/StatusPanel.lua         # the standalone /ts panel frame
 core/SituationPanel.lua      # inline values on Blizzard's Situations tab
 make-release.ps1             # stages + zips a release into .build/
-.pkgmeta                     # what the CurseForge packager leaves out of the zip
-CHANGELOG.md                 # release notes; the CI publishes the sections since the last tag
-.github/workflows/           # tests.yml (push/PR), release.yml (tag -> CurseForge)
+.pkgmeta                     # what the CI packager leaves out of the zip
+CHANGELOG.md                 # release notes; the CI publishes the sections since the last final tag
+.github/workflows/           # tests.yml (push/PR), release.yml (tag -> CurseForge + GitHub Releases)
 tests/                       # Lua 5.1 replay tests, run with ./tests/run.sh
 images/                      # CurseForge logo (logo.png, built on Blizzard's transmog cursor); never shipped
 ```
@@ -78,7 +78,7 @@ functions at file scope), `Capabilities` before anything that probes, `Triggers`
 consumers, `OutfitCache` before `Diagnostics`. Adding a new file means adding it to the toc
 **and** to `$includes` in `make-release.ps1` (which ships only the listed files, so `tests/` never
 reaches the zip). A new *top-level* file or folder that must not ship also goes into `.pkgmeta`'s
-`ignore` list: that is a blacklist, so the CurseForge package includes anything it does not name.
+`ignore` list: that is a blacklist, so the CI package includes anything it does not name.
 
 Module pattern: every file does `local _, ns = ...` and assigns a table onto `ns`. A module with
 setup to do exposes `Module:Init()`, which `TransmogSituations.lua` calls from its `ADDON_LOADED`
@@ -115,10 +115,13 @@ another event frame for game events; subscribe. (The bootstrap's `ADDON_LOADED` 
 
 Publishing is a tag push: `git tag v<version> && git push origin v<version>` runs
 `.github/workflows/release.yml`, which runs the suite, then BigWigs packager uploads to CurseForge
-(Retail + Forever, from `## Interface:`). The tag, the toc's `## Version:` and the topmost
-`CHANGELOG.md` section must name the same version or the run stops before uploading; a tag containing
-`beta` is uploaded as a beta file. It needs `## X-Curse-Project-ID:` in the toc and the repository
-secret `CF_API_KEY`.
+(Retail + Forever, from `## Interface:`) and GitHub Releases, and a last step checks the GitHub
+release carries `TransmogSituations-v<version>.zip`. The tag, the toc's `## Version:` and the
+topmost `CHANGELOG.md` section must name the same version, suffix included, or the run stops before
+uploading. A tag with a suffix (`-beta1`, `-alpha1`) is a pre-release: uploaded as Beta / Alpha,
+never taken as the previous release, so the final version publishes every section since the last
+final tag. It needs `## X-Curse-Project-ID:` in the toc and the repository secret `CF_API_KEY`.
+`release.yml` and `tests.yml` are identical in every addon repo of the author's workspace.
 
 Run the suite after any change under `core/`. It loads the addon through the toc and the real
 `ADDON_LOADED` bootstrap against the stubs in `tests/harness.lua`, replays four real
