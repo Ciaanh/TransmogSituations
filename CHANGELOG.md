@@ -2,6 +2,12 @@
 
 All notable changes to TransmogSituations will be documented in this file.
 
+## [0.2.0-beta2] - 2026-10-13
+
+### Changed
+
+- **Retail 12.1.5**: the addon targets the new Retail patch (Interface 120105), so the game no longer lists it as out of date.
+
 ## [0.2.0-beta1] - 2026-09-25
 
 First public beta. Targets the WoW Forever beta and live Retail.
