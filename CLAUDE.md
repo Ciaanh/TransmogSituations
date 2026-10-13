@@ -55,7 +55,7 @@ Practical rules:
 ## Layout
 
 ```
-TransmogSituations.toc       # load order + Interface versions (120100 retail, 16001 classic)
+TransmogSituations.toc       # load order + Interface versions (120105 retail, 16001 classic)
 TransmogSituations.lua       # addon namespace, SavedVariables, slash commands, ADDON_LOADED bootstrap
 core/Util.lua                # SafeCall / SafeCallAll / RegisterEventsSafely / CharacterKey
 core/Capabilities.lua        # one-time probe of the optional systems
