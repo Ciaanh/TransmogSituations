@@ -135,12 +135,32 @@ In-game verification: `/reload`, and `/console scriptErrors 1` when touching UI 
 `.vscode/settings.json` configures the Lua language server for Lua 5.1 with the ketho WoW API
 annotations.
 
+## Claude Code harness
+
+`.claude/` is vendored from `Ciaanh/wow-dev` (`repo-slice/`): edit it there and sync, not here.
+It loads in local and cloud sessions alike:
+
+- `rules/wow-addon.md`: the shared WoW rules (Lua 5.1, clients, secret values, taint, packaging),
+  loaded when a Lua, toc or xml file is touched;
+- `agents/wow-reviewer.md`: read-only review of the diff;
+- hooks: `luac -p` on every edited Lua file (`lua-check.sh`), toc / `$includes` consistency
+  on every toc edit (`toc-check.sh`), and `tests/run.sh` before a turn ends when the session
+  edited Lua (`stop-tests.sh`). All fail open when Lua is missing.
+
+On the author's machine the `wow-dev` plugin adds `/wow-dev:status`, `:errors` (BugSack),
+`:ref` (Blizzard source per client) and `:deploy`.
+
 ## Blizzard references
 
-Two read-only UI source trees live outside the repo. Check a symbol in **both** before relying on it:
+Two read-only UI source trees live outside the repo, in the workspace. Check a symbol in **both**
+before relying on it (`/wow-dev:ref <Symbol>` does both at once):
 
-- Forever (target): `G:\Dev\WoW\_Workspace\Blizzard_UI_refs\Forever\BlizzardInterfaceCode\`
-- Retail (compatibility floor): `G:\Dev\WoW\_Workspace\Blizzard_UI_refs\Retail\BlizzardInterfaceCode\`
+- Forever (target): `../Blizzard_UI_refs/Forever/BlizzardInterfaceCode/`
+- Retail (compatibility floor): `../Blizzard_UI_refs/Retail/BlizzardInterfaceCode/`
+
+To recheck: the Retail 12.1.5 API documentation (local tree and `wow-ui-source`) now declares
+`C_Weather.GetCurrentWeather` (`WeatherScriptDocumentation.lua`), which the KethoDoc 12.0.5 dump
+and the Client targets table above say Retail lacks. A `/ts dump` on Retail settles it.
 
 Most relevant files, at the same relative paths in each tree:
 - `Interface/AddOns/Blizzard_Transmog/Blizzard_Transmog.lua` — `TransmogWardrobeSituationsMixin`
