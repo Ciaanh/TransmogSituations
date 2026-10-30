@@ -2,6 +2,10 @@
 
 All notable changes to TransmogSituations will be documented in this file.
 
+## [0.2.0] - 2026-10-30
+
+First stable release, for the launch of WoW Forever: the features of 0.2.0-beta2, unchanged.
+
 ## [0.2.0-beta2] - 2026-10-13
 
 ### Changed

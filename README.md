@@ -5,7 +5,7 @@ A World of Warcraft addon that shows the *live values* of the transmog "situatio
 Blizzard's Situations tab lets you configure these triggers but never displays what they
 currently evaluate to; TransmogSituations does.
 
-Targets the **WoW Forever beta** and stays compatible with **live Retail**.
+Targets **WoW Forever** and stays compatible with **live Retail**.
 
 ## Features
 

@@ -2,7 +2,7 @@
 ## Title: TransmogSituations
 ## Notes: Tracks transmog situation criteria
 ## Author: Ciaanh
-## Version: 0.2.0-beta2
+## Version: 0.2.0
 ## SavedVariables: TransmogSituationsDB
 ## X-Website: https://github.com/Ciaanh/TransmogSituations
 ## X-License: MIT
