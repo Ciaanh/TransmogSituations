@@ -156,7 +156,7 @@ Eligibility.VERDICT_NOT_RECORDED = "not-recorded"
 Eligibility.VERDICT_DISAGREES = "disagrees"
 
 function Eligibility:Verify()
-    local okActive, activeOutfitID = ns.Util.SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
+    local okActive, activeOutfitID = ns.Util.CallIfPresent(C_TransmogOutfitInfo.GetActiveOutfitID)
     if not okActive then
         return nil
     end
@@ -189,7 +189,7 @@ function Eligibility:Verify()
     end
 
     -- Only a definite false counts: a client that will not say is scored as usual.
-    local okEnabled, enabled = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
+    local okEnabled, enabled = ns.Util.CallIfPresent(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
     report.situationsDisabled = okEnabled and enabled == false
 
     report.noneApplied = type(activeOutfitID) ~= "number" or activeOutfitID == 0

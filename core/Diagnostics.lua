@@ -7,7 +7,7 @@ local _, ns = ...
 local Diagnostics = {}
 ns.Diagnostics = Diagnostics
 
-local SafeCall = ns.Util.SafeCall
+local CallIfPresent = ns.Util.CallIfPresent
 
 local UNSUPPORTED_TEXT = "|cff808080n/a|r"
 local UNKNOWN_TEXT = "|cffffcc00?|r"
@@ -142,21 +142,21 @@ function Diagnostics:CollectSnapshot()
     }
 
     if ns.Capabilities.hasSituations then
-        local okOutfit, activeOutfitID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
+        local okOutfit, activeOutfitID = CallIfPresent(C_TransmogOutfitInfo.GetActiveOutfitID)
         if okOutfit then
             snapshot.activeOutfitID = activeOutfitID
         end
 
         -- The highlight in the outfit list is the *viewed* outfit, not the active one:
         -- Blizzard does SetSelected(elementData.outfitID == GetCurrentlyViewedOutfitID()).
-        local okViewed, viewedOutfitID = SafeCall(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
+        local okViewed, viewedOutfitID = CallIfPresent(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
         if okViewed then
             snapshot.viewedOutfitID = viewedOutfitID
         end
 
         snapshot.outfitsByID = self:GetOutfitsByID()
 
-        local okEnabled, enabled = SafeCall(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
+        local okEnabled, enabled = CallIfPresent(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
         if okEnabled then
             snapshot.situationsEnabled = enabled and true or false
         end
@@ -287,9 +287,9 @@ function Diagnostics:PrintRawDump()
     )
 
     if caps.hasHousing then
-        local _okHouse, insideHouse = SafeCall(C_Housing.IsInsideHouse)
-        local _okPlot, insidePlot = SafeCall(C_Housing.IsInsideHouseOrPlot)
-        local _okMap, onMap = SafeCall(C_Housing.IsOnNeighborhoodMap)
+        local _okHouse, insideHouse = CallIfPresent(C_Housing.IsInsideHouse)
+        local _okPlot, insidePlot = CallIfPresent(C_Housing.IsInsideHouseOrPlot)
+        local _okMap, onMap = CallIfPresent(C_Housing.IsOnNeighborhoodMap)
         ns.Print(
             string.format(
                 "Housing IsInsideHouse=%s IsInsideHouseOrPlot=%s IsOnNeighborhoodMap=%s",
@@ -303,7 +303,7 @@ function Diagnostics:PrintRawDump()
     local hasAlt, inAlt = nil, nil
     if caps.hasAlternateFormInfo then
         local _okAlt
-        _okAlt, hasAlt, inAlt = ns.Util.SafeCallAll(C_PlayerInfo.GetAlternateFormInfo)
+        _okAlt, hasAlt, inAlt = ns.Util.CallAllIfPresent(C_PlayerInfo.GetAlternateFormInfo)
     end
     local hour, minute = GetGameTime()
     ns.Print(
@@ -317,7 +317,7 @@ function Diagnostics:PrintRawDump()
     )
 
     if caps.hasWeather then
-        local okWeather, weather = SafeCall(C_Weather.GetCurrentWeather)
+        local okWeather, weather = CallIfPresent(C_Weather.GetCurrentWeather)
         ns.Print(
             string.format(
                 "Weather ok=%s type=%s intensity=%s",
@@ -329,7 +329,7 @@ function Diagnostics:PrintRawDump()
     end
 
     if caps.hasEquipmentSets then
-        local _ok, setIDs = SafeCall(C_EquipmentSet.GetEquipmentSetIDs)
+        local _ok, setIDs = CallIfPresent(C_EquipmentSet.GetEquipmentSetIDs)
         if type(setIDs) == "table" then
             ns.Print(
                 string.format(
@@ -341,7 +341,7 @@ function Diagnostics:PrintRawDump()
             )
             for _, setID in ipairs(setIDs) do
                 local okInfo, name, _icon, realSetID, isEquipped, numItems, numEquipped, _numInv, numLost, numIgnored =
-                    ns.Util.SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
+                    ns.Util.CallAllIfPresent(C_EquipmentSet.GetEquipmentSetInfo, setID)
                 ns.Print(
                     string.format(
                         "   id=%s realSetID=%s %s | isEquipped=%s items=%s/%s lost=%s ignored=%s ok=%s",
@@ -361,8 +361,8 @@ function Diagnostics:PrintRawDump()
     end
 
     if caps.hasSituations then
-        local _okActive, activeID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
-        local _okViewed, viewedID = SafeCall(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
+        local _okActive, activeID = CallIfPresent(C_TransmogOutfitInfo.GetActiveOutfitID)
+        local _okViewed, viewedID = CallIfPresent(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
         local outfits = ns.OutfitCache:GetOutfits()
 
         ns.Print(
@@ -450,7 +450,7 @@ function Diagnostics:PrintEligible()
     local eligible, rejected = ns.Eligibility:GetEligible()
 
     -- The match is still worth showing (it is what would apply), but nothing will switch.
-    local okEnabled, enabled = SafeCall(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
+    local okEnabled, enabled = CallIfPresent(C_TransmogOutfitInfo.GetOutfitSituationsEnabled)
     if okEnabled and enabled == false then
         ns.Print("|cffffcc00Situations are switched off: Blizzard will not switch outfits automatically.|r")
     end
@@ -460,7 +460,7 @@ function Diagnostics:PrintEligible()
     else
         -- Unranked on purpose: Blizzard picks among every eligible outfit at random. The
         -- marker is the one it actually applied, not one we prefer.
-        local okActive, activeOutfitID = SafeCall(C_TransmogOutfitInfo.GetActiveOutfitID)
+        local okActive, activeOutfitID = CallIfPresent(C_TransmogOutfitInfo.GetActiveOutfitID)
         ns.Print(
             #eligible > 1 and "Eligible outfits (Blizzard picks one at random):" or "Eligible outfit:"
         )

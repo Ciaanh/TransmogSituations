@@ -4,9 +4,23 @@
 
 HOOKS=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-# to_native / to_posix: Windows (Git Bash) path forms; unchanged on Linux.
+# to_native / to_posix: Windows (Git Bash) path forms; unchanged on Linux and macOS.
 to_native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 to_posix()  { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
+
+# physical PATH: PATH with its symlinks resolved, the form git prints (macOS: /var/... is
+# /private/var/...). Compare a path with git's only after this. Unchanged when it does not exist.
+physical() {
+    local d
+    if [ -d "$1" ]; then (cd "$1" && pwd -P); return; fi
+    d=$(dirname "$1")
+    if [ -d "$d" ]; then
+        d=$(cd "$d" && pwd -P)
+        printf '%s/%s' "${d%/}" "$(basename "$1")"
+    else
+        printf '%s' "$1"
+    fi
+}
 
 first_command() {
     local c
@@ -18,7 +32,8 @@ first_command() {
 }
 
 # Lua 5.1, as tests/run.sh and the CI use it (LUA= / LUAC= override, like tests/run.sh).
-find_lua()  { first_command "${LUA:-}" lua5.1 lua lua.exe "/c/Program Files (x86)/Lua/5.1/lua.exe"; }
+# luac only counts when it is 5.1: a newer one accepts syntax the CI rejects.
+find_lua()  { first_command "${LUA:-}" lua5.1 luajit lua lua.exe "/c/Program Files (x86)/Lua/5.1/lua.exe"; }
 find_luac() {
     local c
     c=$(first_command "${LUAC:-}" luac5.1 "/c/Program Files (x86)/Lua/5.1/luac.exe") && { printf '%s' "$c"; return 0; }
@@ -41,8 +56,8 @@ repo_root() {
 # the others, so nothing runs twice).
 in_project() {
     local proj
-    proj=$(to_posix "${CLAUDE_PROJECT_DIR:-$(pwd)}")
-    case "$1" in "$proj"/*) return 0 ;; *) return 1 ;; esac
+    proj=$(physical "$(to_posix "${CLAUDE_PROJECT_DIR:-$(pwd)}")")
+    case "$(physical "$1")" in "$proj"/*) return 0 ;; *) return 1 ;; esac
 }
 
 # The per-worktree marker listing the sessions that edited Lua since the last green suite.

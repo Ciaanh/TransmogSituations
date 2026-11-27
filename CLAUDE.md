@@ -57,7 +57,7 @@ Practical rules:
 ```
 TransmogSituations.toc       # load order + Interface versions (120105 retail, 16001 classic)
 TransmogSituations.lua       # addon namespace, SavedVariables, slash commands, ADDON_LOADED bootstrap
-core/Util.lua                # SafeCall / SafeCallAll / RegisterEventsSafely / CharacterKey
+core/Util.lua                # CallIfPresent / CallAllIfPresent / RegisterEventsSafely / CharacterKey
 core/Capabilities.lua        # one-time probe of the optional systems
 core/Triggers.lua            # THE model: situationID table, resolvers, category cache
 core/OutfitCache.lua         # per-outfit situation assignments, recorded as the player browses
@@ -276,10 +276,11 @@ before switching for the same reason.
 
 ## Conventions and gotchas
 
-- **Guard every Blizzard API call** with `ns.Util.SafeCall` / `SafeCallAll` (pcall + type check).
-  A missing system must no-op, not error.
+- **Guard every optional Blizzard API call** with `ns.Util.CallIfPresent` / `CallAllIfPresent`:
+  a missing function is skipped, never an error; an error raised by the call reaches BugSack.
 - **Register events defensively** with `ns.Util.RegisterEventsSafely` — `RegisterEvent` throws on
-  an unknown name, and `WEATHER_CHANGED` does not exist on Retail.
+  an unknown name (it checks `C_EventUtils.IsEventValid` first), and `WEATHER_CHANGED` does not
+  exist on Retail. **No `pcall` / `xpcall`** in addon code: errors stay explicit for BugSack.
 - **Wait for `Blizzard_Transmog`.** It loads on demand. `SituationPanel:TryAttach` retries on
   `ADDON_LOADED` / `PLAYER_ENTERING_WORLD` until the frame exists.
 - **Never taint.** Attach with `HookScript` / `hooksecurefunc` on the frame *instance* (the XML

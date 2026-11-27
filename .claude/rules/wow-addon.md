@@ -38,8 +38,16 @@ CLAUDE.md wins where it is more specific.
 - An optional system is probed **once** at load (the repo's capability module) and asked
   afterwards; call sites do not re-test globals. A missing system is reported as *unsupported*,
   never an error or a silent wrong default.
-- Never index `Enum.X.Y` at file scope without a nil check: a missing enum errors on load and no
-  `pcall` can catch a file-scope index. Never hardcode an enum's max value.
+- Never index `Enum.X.Y` at file scope without a nil check: a missing enum errors on load. Never
+  hardcode an enum's max value.
+
+## Errors
+
+- **No `pcall` / `xpcall` in addon code** (the `lua-check` hook rejects them): errors stay
+  explicit so BugSack shows each one with its stack. Never wrap a call to swallow, log or retry
+  its error; test for what may be missing instead (`if C_Foo and C_Foo.Bar then`, the capability
+  probe). `libs/`, `tests/` (a test may assert that a call raises) and dot-directories
+  (`.claude/` tooling) are exempt.
 
 ## Secret values (12.x) and taint
 
@@ -57,8 +65,9 @@ CLAUDE.md wins where it is more specific.
 ## Events and performance
 
 - One event listener per model (the repo's controller or trigger module); other modules
-  subscribe to it. `RegisterUnitEvent` for unit events. Register events through the repo's safe
-  helper (an unknown event raises on some clients).
+  subscribe to it. `RegisterUnitEvent` for unit events. An event that may not exist on a client
+  (`RegisterEvent` raises on it) is checked first with `C_EventUtils.IsEventValid` (Retail and
+  Forever), never wrapped in `pcall`.
 - `OnUpdate` only while there is work (a queue that drains, then the script is removed);
   throttle on accumulated `elapsed`. No table allocation per frame: reuse with `wipe`.
 - `C_Timer.After` cannot be cancelled; use `C_Timer.NewTimer` when it may need to be.

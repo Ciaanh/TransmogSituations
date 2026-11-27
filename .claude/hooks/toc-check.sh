@@ -8,7 +8,7 @@ LUA=$(find_lua) || exit 0
 
 file=$(json_get tool_input.file_path)
 [ -n "$file" ] || exit 0
-file=$(to_posix "$file")
+file=$(physical "$(to_posix "$file")")
 case "$file" in *.toc) ;; *) exit 0 ;; esac
 [ -f "$file" ] || exit 0
 in_project "$file" || exit 0

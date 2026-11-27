@@ -10,8 +10,8 @@ local _, ns = ...
 local Triggers = {}
 ns.Triggers = Triggers
 
-local SafeCall = ns.Util.SafeCall
-local SafeCallAll = ns.Util.SafeCallAll
+local CallIfPresent = ns.Util.CallIfPresent
+local CallAllIfPresent = ns.Util.CallAllIfPresent
 
 -- UI trigger IDs as returned by GetUISituationCategoriesAndOptions(). These are their own
 -- namespace and do NOT line up with Enum.TransmogSituationTrigger (see CLAUDE.md).
@@ -138,7 +138,7 @@ function Triggers:GetCategories()
         return self.categories
     end
 
-    local ok, categories = SafeCall(C_TransmogOutfitInfo.GetUISituationCategoriesAndOptions)
+    local ok, categories = CallIfPresent(C_TransmogOutfitInfo.GetUISituationCategoriesAndOptions)
 
     -- The API is declared MayReturnNothing. Caching an empty answer would pin the addon to
     -- "this client has no situations" until one of the CATEGORY_EVENTS happened to fire,
@@ -262,12 +262,12 @@ function Triggers:GetSpecAssignedSetID()
         return nil
     end
 
-    local okIndex, specIndex = SafeCall(C_SpecializationInfo.GetSpecialization)
+    local okIndex, specIndex = CallIfPresent(C_SpecializationInfo.GetSpecialization)
     if not okIndex or not specIndex then
         return nil
     end
 
-    local okSet, equipmentSetID = SafeCall(C_EquipmentSet.GetEquipmentSetForSpec, specIndex)
+    local okSet, equipmentSetID = CallIfPresent(C_EquipmentSet.GetEquipmentSetForSpec, specIndex)
     return okSet and equipmentSetID or nil
 end
 
@@ -321,7 +321,7 @@ resolvers[UI_TRIGGER.Location] = {
             -- (InstanceDifficultyMixin:IsInDelve) asks C_DelvesUI.HasActiveDelve() without
             -- looking at the type, and delves are reported as "scenario" as often as "party".
             if ns.Capabilities.hasDelves then
-                local ok, hasActiveDelve = SafeCall(C_DelvesUI.HasActiveDelve)
+                local ok, hasActiveDelve = CallIfPresent(C_DelvesUI.HasActiveDelve)
                 if ok and hasActiveDelve then
                     return Primary(SITUATION.LocationDelves)
                 end
@@ -350,7 +350,7 @@ resolvers[UI_TRIGGER.Location] = {
             if instanceType == "neighborhood" or instanceType == "interior" then
                 local insideHouse = false
                 if ns.Capabilities.hasHousing then
-                    local ok, inside = SafeCall(C_Housing.IsInsideHouse)
+                    local ok, inside = CallIfPresent(C_Housing.IsInsideHouse)
                     insideHouse = (ok and inside) and true or false
                 end
 
@@ -411,13 +411,13 @@ resolvers[UI_TRIGGER.Specialization] = {
             return Unsupported("C_SpecializationInfo")
         end
 
-        local okIndex, specIndex = SafeCall(C_SpecializationInfo.GetSpecialization)
+        local okIndex, specIndex = CallIfPresent(C_SpecializationInfo.GetSpecialization)
         if not okIndex or not specIndex then
             -- No specialization before level 10; the category is hidden in that case.
             return Unknown("no specialization")
         end
 
-        local okInfo, specID = SafeCall(C_SpecializationInfo.GetSpecializationInfo, specIndex)
+        local okInfo, specID = CallIfPresent(C_SpecializationInfo.GetSpecializationInfo, specIndex)
         -- specId is documented non-nilable with Default = 0, so a character without a chosen
         -- specialization yields 0 rather than nil -- and 0 is truthy in Lua. Left unchecked
         -- that resolves to "ok" and then fails to match any option, reporting a misleading
@@ -433,7 +433,7 @@ resolvers[UI_TRIGGER.Specialization] = {
         -- loadout that has unsaved changes is unknown -- /ts verify will tell.
         local loadoutID = nil
         if ns.Capabilities.hasTalentLoadouts then
-            local okLoadout, configID = SafeCall(C_ClassTalents.GetLastSelectedSavedConfigID, specID)
+            local okLoadout, configID = CallIfPresent(C_ClassTalents.GetLastSelectedSavedConfigID, specID)
             if okLoadout and type(configID) == "number" and configID > 0 then
                 loadoutID = configID
             end
@@ -450,7 +450,7 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
             return Unsupported("C_EquipmentSet")
         end
 
-        local okIDs, setIDs = SafeCall(C_EquipmentSet.GetEquipmentSetIDs)
+        local okIDs, setIDs = CallIfPresent(C_EquipmentSet.GetEquipmentSetIDs)
         if not okIDs or type(setIDs) ~= "table" then
             return Unknown("no equipment sets")
         end
@@ -463,7 +463,7 @@ resolvers[UI_TRIGGER.EquipmentSet] = {
         for _, setID in ipairs(setIDs) do
             -- GetEquipmentSetInfo returns name, icon, setID, isEquipped, numItems, numEquipped, ...
             local okInfo, _name, _icon, _setID, isEquipped, numItems, numEquipped =
-                SafeCallAll(C_EquipmentSet.GetEquipmentSetInfo, setID)
+                CallAllIfPresent(C_EquipmentSet.GetEquipmentSetInfo, setID)
 
             if okInfo and isEquipped then
                 table.insert(equipped, setID)
@@ -568,7 +568,7 @@ resolvers[UI_TRIGGER.Weather] = {
             return Unsupported("C_Weather")
         end
 
-        local ok, weather = SafeCall(C_Weather.GetCurrentWeather)
+        local ok, weather = CallIfPresent(C_Weather.GetCurrentWeather)
         if not ok or type(weather) ~= "table" then
             return Unknown("no weather info")
         end
@@ -708,9 +708,10 @@ function Triggers:Resolve(triggerID)
         return Unsupported("no resolver for trigger " .. tostring(triggerID))
     end
 
-    local ok, result = pcall(resolver.Resolve)
-    if not ok or type(result) ~= "table" then
-        return Unknown("resolver error")
+    -- A resolver error is not caught: it reaches BugSack with its stack.
+    local result = resolver.Resolve()
+    if type(result) ~= "table" then
+        return Unknown("resolver returned no value")
     end
 
     return self:AttachOption(triggerID, result)

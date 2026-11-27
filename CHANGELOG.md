@@ -2,6 +2,14 @@
 
 All notable changes to TransmogSituations will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Errors are no longer swallowed: a failing game call or trigger now shows up in BugSack with its
+  stack instead of being hidden (a trigger used to read "resolver error"). Events this client
+  does not know are skipped by checking them first, not by catching the error.
+
 ## [0.2.0] - 2026-10-30
 
 First stable release, for the launch of WoW Forever: the features of 0.2.0-beta2, unchanged.

@@ -19,7 +19,7 @@ local GAP, MAX_LABEL_WIDTH, MIN_VALUE_WIDTH = 8, 150, 130
 -- Width of the text on one line. GetStringWidth is bounded by a width already set on the
 -- FontString, which after the first layout is exactly the value being measured for.
 local function TextWidth(fontString)
-    local ok, width = ns.Util.SafeCall(fontString.GetUnboundedStringWidth or fontString.GetStringWidth, fontString)
+    local ok, width = ns.Util.CallIfPresent(fontString.GetUnboundedStringWidth or fontString.GetStringWidth, fontString)
     return ok and tonumber(width) or 0
 end
 
@@ -33,26 +33,19 @@ local function EnsureSaved()
     return db.panel
 end
 
--- BackdropTemplate does not exist everywhere, and a missing template makes CreateFrame raise.
+-- BackdropTemplate exists on both target clients (Retail and Forever, 12.x UI).
 local function CreatePanelFrame()
-    local ok, frame = pcall(CreateFrame, "Frame", PANEL_NAME, UIParent, "BackdropTemplate")
-    if not ok or not frame then
-        frame = CreateFrame("Frame", PANEL_NAME, UIParent)
-    end
+    local frame = CreateFrame("Frame", PANEL_NAME, UIParent, "BackdropTemplate")
 
     if frame.SetBackdrop then
-        pcall(
-            frame.SetBackdrop,
-            frame,
-            {
-                bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-                edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-                tile = true,
-                tileSize = 32,
-                edgeSize = 16,
-                insets = { left = 5, right = 5, top = 5, bottom = 5 }
-            }
-        )
+        frame:SetBackdrop({
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true,
+            tileSize = 32,
+            edgeSize = 16,
+            insets = { left = 5, right = 5, top = 5, bottom = 5 }
+        })
     else
         -- No backdrop support: a plain dark panel is still readable.
         local bg = frame:CreateTexture(nil, "BACKGROUND")

@@ -3,35 +3,25 @@ local _, ns = ...
 local Util = {}
 ns.Util = Util
 
--- House style for every optional Blizzard call: a missing system must no-op, not error.
--- Note this only protects *calls*. Enum members need their own nil check, because indexing
--- a missing enum table happens before any pcall can help (see core/Capabilities.lua).
-function Util.SafeCall(fn, ...)
+-- House style for every optional Blizzard call: a missing function is skipped (false), never an
+-- error. An error raised by the call itself is not caught: it reaches BugSack with its stack.
+-- Enum members need their own nil check (see core/Capabilities.lua).
+function Util.CallIfPresent(fn, ...)
     if type(fn) ~= "function" then
         return false, nil
     end
 
-    local ok, result = pcall(fn, ...)
-    if not ok then
-        return false, nil
-    end
-
-    return true, result
+    return true, (fn(...))
 end
 
 -- Same contract, but keeps every return value. Needed for the Blizzard APIs that answer
 -- with a positional tuple, such as C_EquipmentSet.GetEquipmentSetInfo.
-function Util.SafeCallAll(fn, ...)
+function Util.CallAllIfPresent(fn, ...)
     if type(fn) ~= "function" then
         return false
     end
 
-    local results = { pcall(fn, ...) }
-    if not results[1] then
-        return false
-    end
-
-    return unpack(results)
+    return true, fn(...)
 end
 
 -- Per-character key for SavedVariables that must not leak between characters (equipment set
@@ -46,13 +36,16 @@ function Util.CharacterKey()
 end
 
 -- RegisterEvent raises on an event name the client doesn't know, which is a live hazard
--- across our two target clients (WEATHER_CHANGED does not exist on Retail). Returns the
--- events that were actually registered.
+-- across our two target clients (WEATHER_CHANGED does not exist on Retail): each name is checked
+-- with C_EventUtils.IsEventValid (Retail and Forever) first. Returns the events that were
+-- actually registered.
 function Util.RegisterEventsSafely(frame, events)
     local registered = {}
+    local isValid = C_EventUtils and C_EventUtils.IsEventValid
 
     for _, event in ipairs(events or {}) do
-        if pcall(frame.RegisterEvent, frame, event) then
+        if not isValid or isValid(event) then
+            frame:RegisterEvent(event)
             table.insert(registered, event)
         end
     end
