@@ -9,7 +9,7 @@ LUA=$(find_lua) || exit 0
 
 file=$(json_get tool_input.file_path)
 [ -n "$file" ] || exit 0
-file=$(to_posix "$file")
+file=$(physical "$(to_posix "$file")")
 case "$file" in *.lua) ;; *) exit 0 ;; esac
 [ -f "$file" ] || exit 0
 in_project "$file" || exit 0
@@ -25,6 +25,34 @@ if LUAC=$(find_luac); then
         exit 2
     fi
 fi
+
+# No pcall / xpcall in addon code: errors stay explicit so BugSack shows each one with its stack.
+# Test suites may use them to assert that a call raises, and dot-directories (.claude/, .github/)
+# hold tooling, not addon code. Comments are ignored.
+case "$(printf '%s' "$rel" | tr '[:upper:]' '[:lower:]')" in
+    tests/* | */tests/* | .* | */.*) ;;
+    *)
+        hits=$(awk '
+            {
+                line = $0; out = ""
+                while (line != "") {
+                    if (inblock) {
+                        p = index(line, "]]"); if (!p) { line = ""; break }
+                        line = substr(line, p + 2); inblock = 0; continue
+                    }
+                    p = index(line, "--"); if (!p) { out = out line; break }
+                    out = out substr(line, 1, p - 1); rest = substr(line, p + 2)
+                    if (rest ~ /^\[=*\[/) { inblock = 1; line = substr(rest, 2) } else break
+                }
+                if (out ~ /(^|[^A-Za-z0-9_.:])x?pcall[ \t]*\(/) printf "%d: %s\n", NR, $0
+            }' "$file")
+        if [ -n "$hits" ]; then
+            printf '%s calls pcall/xpcall, which addon code must not do (errors stay explicit for BugSack).\nTest for what may be missing instead (`if C_Foo and C_Foo.Bar then`, the capability probe):\n%s\n' \
+                "$rel" "$(printf '%s\n' "$hits" | head -20)" >&2
+            exit 2
+        fi
+        ;;
+esac
 
 if [ -f "$root/.luacheckrc" ] && LC=$(find_luacheck); then
     if ! out=$(cd "$root" && "$LC" --no-color --codes --formatter plain "$rel" 2>&1); then

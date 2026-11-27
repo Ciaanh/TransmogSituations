@@ -142,6 +142,9 @@ H.situationsEnabled = true
 H.sets = {} -- { { id, name, isEquipped, numItems, numEquipped } }
 H.specAssignedSet = nil
 H.loadedAddons = {}
+-- Events this stubbed client does not know: RegisterEvent raises on them, as a real client does,
+-- and C_EventUtils.IsEventValid answers false.
+H.unknownEvents = {}
 
 H.W = {
     inInstance = false,
@@ -189,7 +192,10 @@ function H.NewFrame()
         if self.scripts[which] then self.scripts[which](self, ...) end
         for _, fn in ipairs(self.hooks[which] or {}) do fn(self, ...) end
     end
-    function f:RegisterEvent(event) self.registered[event] = true end
+    function f:RegisterEvent(event)
+        if H.unknownEvents[event] then error("unknown event " .. event) end
+        self.registered[event] = true
+    end
     function f:UnregisterEvent(event) self.registered[event] = nil end
     function f:UnregisterAllEvents() self.registered = {} end
     function f:IsEventRegistered(event) return self.registered[event] == true end
@@ -305,6 +311,7 @@ C_SpecializationInfo = {
     GetSpecializationInfo = function() return W.specID end,
 }
 C_AddOns = { IsAddOnLoaded = function(name) return H.loadedAddons[name] == true end }
+C_EventUtils = { IsEventValid = function(event) return not H.unknownEvents[event] end }
 -- Tickers do not run by themselves; H.RunTickers() advances them, so a test decides when time
 -- passes. After runs at once: nothing in the addon depends on it being deferred.
 H.tickers = {}

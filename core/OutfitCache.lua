@@ -32,7 +32,7 @@ function OutfitCache.IsAssigned(optionData)
     end
 
     if ns.Capabilities.hasSituations and type(C_TransmogOutfitInfo.GetOutfitSituation) == "function" then
-        local ok, assigned = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitSituation, optionData.option)
+        local ok, assigned = ns.Util.CallIfPresent(C_TransmogOutfitInfo.GetOutfitSituation, optionData.option)
         if ok and type(assigned) == "boolean" then
             return assigned, "api"
         end
@@ -99,7 +99,7 @@ function OutfitCache:RecordViewed()
         return nil
     end
 
-    local okViewed, outfitID = ns.Util.SafeCall(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
+    local okViewed, outfitID = ns.Util.CallIfPresent(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
     if not okViewed or type(outfitID) ~= "number" or outfitID == 0 then
         return nil
     end
@@ -107,7 +107,7 @@ function OutfitCache:RecordViewed()
     -- GetOutfitSituation answers with the *pending* state while the player is editing on the
     -- Situations tab, and VIEWED_TRANSMOG_OUTFIT_SITUATIONS_CHANGED fires for every such
     -- edit. Recording then would store what they might never apply. Wait for the commit.
-    local okPending, pending = ns.Util.SafeCall(C_TransmogOutfitInfo.HasPendingOutfitSituations)
+    local okPending, pending = ns.Util.CallIfPresent(C_TransmogOutfitInfo.HasPendingOutfitSituations)
     if okPending and pending then
         return nil
     end
@@ -222,7 +222,7 @@ function OutfitCache:GetOutfits()
         return {}
     end
 
-    local ok, outfits = ns.Util.SafeCall(C_TransmogOutfitInfo.GetOutfitsInfo)
+    local ok, outfits = ns.Util.CallIfPresent(C_TransmogOutfitInfo.GetOutfitsInfo)
     return (ok and type(outfits) == "table") and outfits or {}
 end
 
@@ -318,7 +318,7 @@ end
 local function HasPendingChanges()
     for _, fn in ipairs({ C_TransmogOutfitInfo.HasPendingOutfitTransmogs, C_TransmogOutfitInfo.HasPendingOutfitSituations }) do
         if type(fn) == "function" then
-            local ok, pending = ns.Util.SafeCall(fn)
+            local ok, pending = ns.Util.CallIfPresent(fn)
             if not ok or pending then
                 return true
             end
@@ -359,7 +359,7 @@ function OutfitCache:Scan()
 
     -- Blizzard's own outfit list never switches outfits during a transmog event
     -- (TransmogOutfitEntryMixin:OnClick, both clients); the list is locked to the event outfit.
-    local okEvent, inEvent = ns.Util.SafeCall(C_TransmogOutfitInfo.InTransmogEvent)
+    local okEvent, inEvent = ns.Util.CallIfPresent(C_TransmogOutfitInfo.InTransmogEvent)
     if okEvent and inEvent then
         Report("Not during a transmog event.")
         return false
@@ -373,7 +373,7 @@ function OutfitCache:Scan()
         return false
     end
 
-    local okOriginal, original = ns.Util.SafeCall(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
+    local okOriginal, original = ns.Util.CallIfPresent(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
     if not okOriginal or type(original) ~= "number" then
         Report("Could not read the currently viewed outfit.")
         return false
@@ -402,7 +402,7 @@ function OutfitCache:Scan()
         end
 
         if original ~= 0 then
-            ns.Util.SafeCall(C_TransmogOutfitInfo.ChangeViewedOutfit, original)
+            ns.Util.CallIfPresent(C_TransmogOutfitInfo.ChangeViewedOutfit, original)
         end
 
         if failed > 0 then
@@ -444,11 +444,11 @@ function OutfitCache:Scan()
             end
 
             local target = pending[index].outfitID
-            ns.Util.SafeCall(C_TransmogOutfitInfo.ChangeViewedOutfit, target)
+            ns.Util.CallIfPresent(C_TransmogOutfitInfo.ChangeViewedOutfit, target)
 
             -- Verify rather than assume: if the client refused, recording now would write
             -- the previous outfit's assignments under the target's id.
-            local okViewed, viewed = ns.Util.SafeCall(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
+            local okViewed, viewed = ns.Util.CallIfPresent(C_TransmogOutfitInfo.GetCurrentlyViewedOutfitID)
             if not okViewed or viewed ~= target then
                 failed = failed + 1
                 return

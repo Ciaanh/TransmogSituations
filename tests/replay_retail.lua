@@ -17,7 +17,14 @@ H.outfits = {
 }
 H.activeOutfitID, H.viewedOutfitID = 3, 3
 
+-- Retail has no WEATHER_CHANGED: RegisterEvent would raise on it.
+H.unknownEvents.WEATHER_CHANGED = true
+
 local ns = H.Load()
+
+H.Section("events")
+H.Check("WEATHER_CHANGED skipped", ns.Triggers.watcher:IsEventRegistered("WEATHER_CHANGED"), false)
+H.Check("known events registered", ns.Triggers.watcher:IsEventRegistered("EQUIPMENT_SWAP_FINISHED"), true)
 
 H.Section("resolved values")
 local EXPECTED = {
